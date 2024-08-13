@@ -1,2 +1,3 @@
-# dann-of-thursday
-https://gunsword.fandom.com/wiki/Dann_of_Thursday
+# Dann of Thursday
+
+![img](https://images6.fanpop.com/image/photos/43800000/Dann-of-Thursday-gun-x-sword-43866941-720-480.jpg)
