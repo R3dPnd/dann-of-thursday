@@ -1,0 +1,13 @@
+# Ignore local virtual env
+.venv/
+
+# Ignore wake-word model binaries
+models/*.tflite
+models/*.onnx
+models/*.bin
+models/*.npz
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo

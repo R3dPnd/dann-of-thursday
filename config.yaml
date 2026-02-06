@@ -1,0 +1,44 @@
+# Dann of Thursday - Voice AI Agent Config
+# Copy to config.yaml and adjust for your system.
+
+audio:
+  sample_rate: 16000
+  channels: 1
+  input_device: null   # null = default mic
+  output_device: null  # null = default speaker
+  silence_timeout_ms: 1500   # stop recording after this much silence
+  max_record_ms: 15000       # max recording length
+  silence_threshold: 0.01    # RMS below this = silence
+
+wake_word:
+  engine: openwakeword
+  model_path: models/ok_dann.tflite
+  sensitivity: 0.5
+  debounce: 2
+  cooldown_ms: 2000
+
+stt:
+  engine: faster_whisper
+  model_size: base          # tiny, base, small, medium, large-v2
+  language: en
+  device: cpu               # cpu or cuda
+  compute_type: int8
+
+ollama:
+  base_url: http://localhost:11434
+  model: llama3.2
+  system_prompt: |
+    You are a concise voice assistant. Keep responses brief and suitable for spoken output.
+    Avoid markdown, long lists, or complex formatting. Be helpful and direct.
+  temperature: 0.7
+  max_tokens: 150
+
+tts:
+  engine: piper
+  # Uses piper-tts Python API (works on M1 Mac). piper_path unused.
+  voice_model: models/piper/en_US-lessac-medium
+  speed: 1.0
+
+ux:
+  play_listening_sound: true
+  play_thinking_sound: false
