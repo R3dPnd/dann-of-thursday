@@ -1,0 +1,27 @@
+meta {
+  name: ollama-chat
+  type: http
+  seq: 3
+}
+
+get {
+  url: http://localhost:3000/api/v1/chats/5e19d65f-aa95-4f0f-aea1-be6f1e86ba1b
+  body: none
+  auth: inherit
+}
+
+headers {
+  User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0
+  Accept: application/json
+  Accept-Language: en-US,en;q=0.5
+  Accept-Encoding: gzip, deflate, br, zstd
+  Referer: http://localhost:3000/c/5e19d65f-aa95-4f0f-aea1-be6f1e86ba1b
+  Content-Type: application/json
+  authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdjZTc4YTIyLTU1ZTYtNDg0MC04ZWM0LTJjYzlkNWVjYmQ2NiJ9.Gx2y6P9kSnO05yIw2WAAW11q2dRX6xr7Ttql6vropf4
+  Connection: keep-alive
+  Cookie: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdjZTc4YTIyLTU1ZTYtNDg0MC04ZWM0LTJjYzlkNWVjYmQ2NiJ9.Gx2y6P9kSnO05yIw2WAAW11q2dRX6xr7Ttql6vropf4
+  Sec-Fetch-Dest: empty
+  Sec-Fetch-Mode: cors
+  Sec-Fetch-Site: same-origin
+  Priority: u=4
+}
