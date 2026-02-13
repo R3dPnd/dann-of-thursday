@@ -133,3 +133,17 @@ python wakeword_test.py --model models/ok_dann.ppn --access-key YOUR_ACCESS_KEY
 - **Cross-platform**: Works on Windows, macOS, Linux
 - **Fast training**: Custom wake words trained in seconds
 - **Free tier**: Free AccessKey for development
+
+### Troubleshooting: "incorrect format or belongs to a different platform"
+
+If you get this error with your custom `.ppn` file:
+
+1. **Test with built-in first** – Set `builtin_keyword: porcupine` in `config.yaml` and say "porcupine" to wake. If that works, your AccessKey and setup are fine. The issue is the custom `.ppn` file.
+
+2. **Re-download the correct platform** – In Picovoice Console, when creating your custom wake word:
+   - After training, click **Download**
+   - Choose **Windows** (not Linux, macOS, Android, iOS, Raspberry Pi)
+   - For most PCs: select **Windows x86_64** (not arm64)
+   - Save the downloaded `.ppn` as `models/ok_dann.ppn`, overwriting the old file
+
+3. **Remove builtin_keyword** – Once you have the correct `.ppn`, set `builtin_keyword: null` or remove it so the app uses your custom "ok Dann" model.

@@ -115,9 +115,14 @@ class Orchestrator:
     def run(self) -> None:
         """Start wake word listener and run until interrupted."""
         model_path = Path(self._wake_cfg.get("model_path", "models/ok_dann.ppn"))
-        if not model_path.exists():
+        builtin_keyword = self._wake_cfg.get("builtin_keyword")
+
+        # Require either custom .ppn or built-in keyword
+        if not builtin_keyword and not model_path.exists():
             raise FileNotFoundError(
-                f"Wake word model not found: {model_path}. See wake-word.md for setup."
+                f"Wake word model not found: {model_path}. "
+                "Either download correct .ppn (Windows x86_64) from Picovoice Console, "
+                "or set builtin_keyword: porcupine in config to test with built-in."
             )
 
         access_key = self._wake_cfg.get("access_key")
@@ -130,6 +135,7 @@ class Orchestrator:
             model_path=model_path,
             on_wake=self._on_wake,
             access_key=access_key,
+            builtin_keyword=builtin_keyword,
             sensitivity=self._wake_cfg.get("sensitivity", 0.5),
             debounce=self._wake_cfg.get("debounce", 2),
             cooldown_s=self._wake_cfg.get("cooldown_ms", 2000) / 1000,
@@ -139,7 +145,8 @@ class Orchestrator:
         )
 
         self._running = True
-        print("[dann] Listening for 'ok Dann'... (Ctrl+C to stop)", flush=True)
+        wake_phrase = builtin_keyword or "ok Dann"
+        print(f"[dann] Listening for '{wake_phrase}'... (Ctrl+C to stop)", flush=True)
         self._detector.start()
 
         try:

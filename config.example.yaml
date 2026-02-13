@@ -13,6 +13,7 @@ audio:
 wake_word:
   engine: porcupine
   access_key: YOUR_PICOVOICE_ACCESS_KEY  # Get from https://console.picovoice.ai/
+  # builtin_keyword: porcupine  # Use to test without custom .ppn; set null for ok_dann.ppn
   model_path: models/ok_dann.ppn
   sensitivity: 0.5
   debounce: 2

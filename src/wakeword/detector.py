@@ -15,10 +15,11 @@ class WakeWordDetector:
 
     def __init__(
         self,
-        model_path: Path | str,
+        model_path: Path | str | None,
         on_wake: Callable[[], None],
         *,
         access_key: str,
+        builtin_keyword: str | None = None,
         sensitivity: float = 0.5,
         debounce: int = 2,
         cooldown_s: float = 2.0,
@@ -26,9 +27,10 @@ class WakeWordDetector:
         block_size: int = 512,
         device: int | None = None,
     ):
-        self.model_path = Path(model_path)
+        self.model_path = Path(model_path) if model_path else None
         self.on_wake = on_wake
         self.access_key = access_key
+        self.builtin_keyword = builtin_keyword
         self.sensitivity = sensitivity
         self.debounce = debounce
         self.cooldown_s = cooldown_s
@@ -41,12 +43,24 @@ class WakeWordDetector:
         if self.block_size != 512:
             raise ValueError("Porcupine requires block_size=512 for 16kHz audio")
 
-        # Initialize Porcupine with custom keyword model
-        self._porcupine = pvporcupine.create(
-            access_key=self.access_key,
-            keyword_paths=[str(self.model_path)],
-            sensitivities=[self.sensitivity],
-        )
+        # Initialize Porcupine: use built-in keyword or custom .ppn
+        if builtin_keyword:
+            self._porcupine = pvporcupine.create(
+                access_key=self.access_key,
+                keywords=[builtin_keyword],
+                sensitivities=[self.sensitivity],
+            )
+        elif self.model_path and self.model_path.exists():
+            self._porcupine = pvporcupine.create(
+                access_key=self.access_key,
+                keyword_paths=[str(self.model_path)],
+                sensitivities=[self.sensitivity],
+            )
+        else:
+            raise FileNotFoundError(
+                f"Wake word model not found: {self.model_path}. "
+                "Use builtin_keyword (e.g. 'porcupine') to test, or download correct .ppn from Picovoice Console."
+            )
 
         self._last_trigger = 0.0
         self._consecutive = 0
