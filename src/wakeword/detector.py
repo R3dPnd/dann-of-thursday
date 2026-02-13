@@ -1,4 +1,4 @@
-"""Wake word detector using openWakeWord."""
+"""Wake word detector using Picovoice Porcupine."""
 
 import threading
 import time
@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
+import pvporcupine
 import sounddevice as sd
-from openwakeword.model import Model
 
 
 class WakeWordDetector:
@@ -18,6 +18,7 @@ class WakeWordDetector:
         model_path: Path | str,
         on_wake: Callable[[], None],
         *,
+        access_key: str,
         sensitivity: float = 0.5,
         debounce: int = 2,
         cooldown_s: float = 2.0,
@@ -27,6 +28,7 @@ class WakeWordDetector:
     ):
         self.model_path = Path(model_path)
         self.on_wake = on_wake
+        self.access_key = access_key
         self.sensitivity = sensitivity
         self.debounce = debounce
         self.cooldown_s = cooldown_s
@@ -34,10 +36,18 @@ class WakeWordDetector:
         self.block_size = block_size
         self.device = device
 
-        self._model = Model(
-            wakeword_paths=[str(self.model_path)],
-            sensitivity=[sensitivity],
+        # Porcupine requires 16-bit PCM audio (int16), not float32
+        # Porcupine expects exactly 512 samples per frame for 16kHz
+        if self.block_size != 512:
+            raise ValueError("Porcupine requires block_size=512 for 16kHz audio")
+
+        # Initialize Porcupine with custom keyword model
+        self._porcupine = pvporcupine.create(
+            access_key=self.access_key,
+            keyword_paths=[str(self.model_path)],
+            sensitivities=[self.sensitivity],
         )
+
         self._last_trigger = 0.0
         self._consecutive = 0
         self._running = False
@@ -58,6 +68,9 @@ class WakeWordDetector:
         if self._thread:
             self._thread.join(timeout=2.0)
             self._thread = None
+        if self._porcupine:
+            self._porcupine.delete()
+            self._porcupine = None
 
     def pause(self) -> None:
         """Pause detection (e.g. during TTS playback)."""
@@ -75,9 +88,17 @@ class WakeWordDetector:
             if self._paused:
                 return
 
-            audio = np.frombuffer(indata, dtype=np.float32)
-            scores = self._model.predict(audio)
-            hit = any(s >= self.sensitivity for s in scores)
+            # Convert float32 audio to int16 PCM for Porcupine
+            audio_float = np.frombuffer(indata, dtype=np.float32)
+            # Clip to [-1.0, 1.0] range before conversion
+            audio_float = np.clip(audio_float, -1.0, 1.0)
+            # Convert to int16 PCM
+            audio_int16 = (audio_float * 32767).astype(np.int16)
+
+            # Porcupine.process() returns keyword index (0 for first keyword, -1 if no match)
+            keyword_index = self._porcupine.process(audio_int16)
+            hit = keyword_index >= 0
+
             self._consecutive = self._consecutive + 1 if hit else 0
 
             now = time.monotonic()

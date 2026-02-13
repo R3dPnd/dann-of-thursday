@@ -11,8 +11,9 @@ audio:
   silence_threshold: 0.01    # RMS below this = silence
 
 wake_word:
-  engine: openwakeword
-  model_path: models/ok_dann.tflite
+  engine: porcupine
+  access_key: YOUR_PICOVOICE_ACCESS_KEY  # Get from https://console.picovoice.ai/
+  model_path: models/ok_dann.ppn
   sensitivity: 0.5
   debounce: 2
   cooldown_ms: 2000

@@ -10,9 +10,12 @@ Prereqs (macOS):
 
 Setup:
     cp config.example.yaml config.yaml
-    # Edit config.yaml: Ollama model, Piper voice path, wake word model path
+    # Edit config.yaml: 
+    #   - Set wake_word.access_key (get from https://console.picovoice.ai/)
+    #   - Set wake_word.model_path to models/ok_dann.ppn
+    #   - Ollama model, Piper voice path
     # Install Piper: https://github.com/rhasspy/piper/releases
-    # Place wake word model at models/ok_dann.tflite (see wake-word.md)
+    # Create wake word model via Picovoice Console (see wake-word.md)
 
 Run:
     python -m src.main

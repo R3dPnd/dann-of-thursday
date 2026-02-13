@@ -114,15 +114,22 @@ class Orchestrator:
 
     def run(self) -> None:
         """Start wake word listener and run until interrupted."""
-        model_path = Path(self._wake_cfg.get("model_path", "models/ok_dann.tflite"))
+        model_path = Path(self._wake_cfg.get("model_path", "models/ok_dann.ppn"))
         if not model_path.exists():
             raise FileNotFoundError(
                 f"Wake word model not found: {model_path}. See wake-word.md for setup."
             )
 
+        access_key = self._wake_cfg.get("access_key")
+        if not access_key:
+            raise ValueError(
+                "Porcupine access_key required. Get one from https://console.picovoice.ai/"
+            )
+
         self._detector = WakeWordDetector(
             model_path=model_path,
             on_wake=self._on_wake,
+            access_key=access_key,
             sensitivity=self._wake_cfg.get("sensitivity", 0.5),
             debounce=self._wake_cfg.get("debounce", 2),
             cooldown_s=self._wake_cfg.get("cooldown_ms", 2000) / 1000,

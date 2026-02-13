@@ -1,4 +1,4 @@
-openwakeword==0.6.0
+pvporcupine>=4.0.0
 sounddevice==0.4.6
 numpy==1.26.4
 soundfile>=0.12.1
