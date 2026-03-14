@@ -1,12 +1,14 @@
 """Orchestrates wake word -> record -> STT -> LLM -> TTS -> playback."""
 
 import tempfile
+import threading
 from pathlib import Path
 
 from src.audio import play_wav, record_until_silence
 from src.audio.capture import save_wav
 from src.config import load_config
 from src.llm import generate_response
+from src.mcp_client import MCPManager
 from src.stt import transcribe_audio
 from src.tts import synthesize_speech
 from src.wakeword import WakeWordDetector
@@ -23,14 +25,16 @@ class Orchestrator:
         self._ollama_cfg = self.config.get("ollama", {})
         self._tts_cfg = self.config.get("tts", {})
         self._ux_cfg = self.config.get("ux", {})
+        self._mcp_cfg = self.config.get("mcp", {})
 
         self._detector: WakeWordDetector | None = None
+        self._mcp: MCPManager | None = None
         self._running = False
+        self._wake_event = threading.Event()
 
     def _on_wake(self) -> None:
-        """Called when wake word detected. Run full pipeline in main thread."""
-        print("[dann] Wake word detected. Listening...", flush=True)
-        self._run_pipeline()
+        """Called from audio callback — just signals the main thread."""
+        self._wake_event.set()
 
     def _run_pipeline(self) -> None:
         """Record -> STT -> Ollama -> TTS -> playback."""
@@ -74,8 +78,9 @@ class Orchestrator:
 
                 print(f"[dann] You said: {text}", flush=True)
 
-                # 3. LLM
+                # 3. LLM (with MCP tools when available)
                 print("[dann] Thinking...", flush=True)
+                mcp_tools = self._mcp.tools if self._mcp else None
                 response = generate_response(
                     text,
                     base_url=self._ollama_cfg.get("base_url", "http://localhost:11434"),
@@ -83,6 +88,8 @@ class Orchestrator:
                     system_prompt=self._ollama_cfg.get("system_prompt", ""),
                     temperature=self._ollama_cfg.get("temperature", 0.7),
                     max_tokens=self._ollama_cfg.get("max_tokens", 150),
+                    tools=mcp_tools or None,
+                    mcp=self._mcp,
                 )
 
                 if not response:
@@ -114,10 +121,16 @@ class Orchestrator:
 
     def run(self) -> None:
         """Start wake word listener and run until interrupted."""
+        # ---- MCP servers (optional) ----
+        mcp_servers = self._mcp_cfg.get("servers") or []
+        if mcp_servers:
+            self._mcp = MCPManager()
+            self._mcp.start(mcp_servers)
+
+        # ---- Wake word detector ----
         model_path = Path(self._wake_cfg.get("model_path", "models/ok_dann.ppn"))
         builtin_keyword = self._wake_cfg.get("builtin_keyword")
 
-        # Require either custom .ppn or built-in keyword
         if not builtin_keyword and not model_path.exists():
             raise FileNotFoundError(
                 f"Wake word model not found: {model_path}. "
@@ -150,10 +163,14 @@ class Orchestrator:
         self._detector.start()
 
         try:
-            import time
             while self._running:
-                time.sleep(1)
+                if self._wake_event.wait(timeout=0.5):
+                    self._wake_event.clear()
+                    print("[dann] Wake word detected. Listening...", flush=True)
+                    self._run_pipeline()
         except KeyboardInterrupt:
             print("\n[dann] Stopping...", flush=True)
         finally:
             self._detector.stop()
+            if self._mcp:
+                self._mcp.stop()

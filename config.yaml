@@ -4,27 +4,26 @@
 audio:
   sample_rate: 16000
   channels: 1
-  input_device: null   # null = default mic
-  output_device: null  # null = default speaker
-  silence_timeout_ms: 1500   # stop recording after this much silence
-  max_record_ms: 15000       # max recording length
-  silence_threshold: 0.01    # RMS below this = silence
+  input_device: 4 # null = default mic
+  output_device: null # null = default speaker
+  silence_timeout_ms: 1500 # stop recording after this much silence
+  max_record_ms: 15000 # max recording length
+  silence_threshold: 0.01 # RMS below this = silence
 
 wake_word:
   engine: porcupine
-  access_key: YOUR_PICOVOICE_ACCESS_KEY  # Get from https://console.picovoice.ai/
-  # Use builtin_keyword to test without custom .ppn (e.g. say "porcupine" to wake)
-  builtin_keyword: porcupine  # Set to null when using custom ok_dann.ppn
+  access_key: OlV3mcUn7ojHD5ccjfILFAozS5GuTPweUHP6ft26sOkO3G/H3P4+Lw== # Get from https://console.picovoice.ai/
+  # builtin_keyword: porcupine  # Use to test without custom .ppn
   model_path: models/ok_dann.ppn
-  sensitivity: 0.5
-  debounce: 2
+  sensitivity: 0.8
+  debounce: 1
   cooldown_ms: 2000
 
 stt:
   engine: faster_whisper
-  model_size: base          # tiny, base, small, medium, large-v2
+  model_size: base # tiny, base, small, medium, large-v2
   language: en
-  device: cpu               # cpu or cuda
+  device: cpu # cpu or cuda
   compute_type: int8
 
 ollama:
@@ -39,8 +38,23 @@ ollama:
 tts:
   engine: piper
   # Uses piper-tts Python API (works on M1 Mac). piper_path unused.
-  voice_model: models/piper/en_US-lessac-medium
+  voice_model: models/pieper/en_GB-northern_english_male-medium
   speed: 1.0
+
+mcp:
+  servers: []
+  # Add MCP tool servers here. Each entry starts a subprocess and
+  # exposes its tools to the LLM during conversation.
+  #
+  # Example — a Python-based MCP server:
+  #   - name: weather
+  #     command: python
+  #     args: ["-m", "weather_server"]
+  #
+  # Example — a Node.js MCP server:
+  #   - name: calendar
+  #     command: node
+  #     args: ["path/to/calendar-server/index.js"]
 
 ux:
   play_listening_sound: true

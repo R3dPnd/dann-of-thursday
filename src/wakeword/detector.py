@@ -1,6 +1,5 @@
 """Wake word detector using Picovoice Porcupine."""
 
-import threading
 import time
 from pathlib import Path
 from typing import Callable
@@ -38,12 +37,9 @@ class WakeWordDetector:
         self.block_size = block_size
         self.device = device
 
-        # Porcupine requires 16-bit PCM audio (int16), not float32
-        # Porcupine expects exactly 512 samples per frame for 16kHz
         if self.block_size != 512:
             raise ValueError("Porcupine requires block_size=512 for 16kHz audio")
 
-        # Initialize Porcupine: use built-in keyword or custom .ppn
         if builtin_keyword:
             self._porcupine = pvporcupine.create(
                 access_key=self.access_key,
@@ -66,74 +62,79 @@ class WakeWordDetector:
         self._consecutive = 0
         self._running = False
         self._paused = False
-        self._thread: threading.Thread | None = None
+        self._stream: sd.InputStream | None = None
 
     def start(self) -> None:
-        """Start listening in background thread."""
+        """Start listening."""
         if self._running:
             return
         self._running = True
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
+        self._paused = False
+        self._open_stream()
 
     def stop(self) -> None:
-        """Stop listening."""
+        """Stop listening and release all resources."""
         self._running = False
-        if self._thread:
-            self._thread.join(timeout=2.0)
-            self._thread = None
+        self._close_stream()
         if self._porcupine:
             self._porcupine.delete()
             self._porcupine = None
 
     def pause(self) -> None:
-        """Pause detection (e.g. during TTS playback)."""
+        """Pause detection and release the audio device for other streams."""
         self._paused = True
+        self._close_stream()
 
     def resume(self) -> None:
-        """Resume detection."""
+        """Resume detection and reopen the audio device."""
         self._paused = False
+        self._consecutive = 0
+        if self._running:
+            self._open_stream()
 
-    def _run(self) -> None:
-        def callback(indata: np.ndarray, frames: int, time_info: object, status: object) -> None:
-            nonlocal self
-            if status:
-                print(f"[wakeword] {status}", flush=True)
-            if self._paused:
-                return
-
-            # Convert float32 audio to int16 PCM for Porcupine
-            audio_float = np.frombuffer(indata, dtype=np.float32)
-            # Clip to [-1.0, 1.0] range before conversion
-            audio_float = np.clip(audio_float, -1.0, 1.0)
-            # Convert to int16 PCM
-            audio_int16 = (audio_float * 32767).astype(np.int16)
-
-            # Porcupine.process() returns keyword index (0 for first keyword, -1 if no match)
-            keyword_index = self._porcupine.process(audio_int16)
-            hit = keyword_index >= 0
-
-            self._consecutive = self._consecutive + 1 if hit else 0
-
-            now = time.monotonic()
-            if (
-                self._consecutive >= self.debounce
-                and (now - self._last_trigger) >= self.cooldown_s
-            ):
-                self._last_trigger = now
-                self._consecutive = 0
-                try:
-                    self.on_wake()
-                except Exception as e:
-                    print(f"[wakeword] callback error: {e}", flush=True)
-
-        with sd.InputStream(
+    def _open_stream(self) -> None:
+        if self._stream is not None:
+            return
+        self._stream = sd.InputStream(
             channels=1,
             samplerate=self.sample_rate,
             blocksize=self.block_size,
             dtype="float32",
             device=self.device,
-            callback=callback,
+            callback=self._audio_callback,
+        )
+        self._stream.start()
+
+    def _close_stream(self) -> None:
+        if self._stream is not None:
+            self._stream.stop()
+            self._stream.close()
+            self._stream = None
+
+    def _audio_callback(
+        self, indata: np.ndarray, frames: int, time_info: object, status: object
+    ) -> None:
+        if status:
+            print(f"[wakeword] {status}", flush=True)
+        if self._paused or not self._running:
+            return
+
+        audio_float = np.clip(indata[:, 0], -1.0, 1.0)
+        audio_int16 = (audio_float * 32767).astype(np.int16)
+
+        keyword_index = self._porcupine.process(audio_int16)
+        hit = keyword_index >= 0
+
+        self._consecutive = self._consecutive + 1 if hit else 0
+
+        now = time.monotonic()
+        if (
+            self._consecutive >= self.debounce
+            and (now - self._last_trigger) >= self.cooldown_s
         ):
-            while self._running:
-                time.sleep(0.1)
+            self._last_trigger = now
+            self._consecutive = 0
+            try:
+                self.on_wake()
+            except Exception as e:
+                print(f"[wakeword] callback error: {e}", flush=True)
