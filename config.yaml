@@ -4,7 +4,7 @@
 audio:
   sample_rate: 16000
   channels: 1
-  input_device: 4 # null = default mic
+  input_device: null # null = default mic
   output_device: null # null = default speaker
   silence_timeout_ms: 1500 # stop recording after this much silence
   max_record_ms: 15000 # max recording length
@@ -30,10 +30,15 @@ ollama:
   base_url: http://localhost:11434
   model: llama3.2
   system_prompt: |
-    You are a concise voice assistant. Keep responses brief and suitable for spoken output.
-    Avoid markdown, long lists, or complex formatting. Be helpful and direct.
+    You are a voice assistant. Rules:
+    - Respond in 1-2 short spoken sentences only. Never use lists, markdown, or long explanations.
+    - After a tool call succeeds, confirm in one sentence and stop. Do not call the same tool again.
+    - Only call a tool when the user explicitly asks for that action. Conversational replies ("yes", "start coding", "thanks") never need a tool call.
+    - open_claude_code: use when user says "open Claude Code in <project>" or "start a coding session".
+    - ask_claude_code: use when user wants an answer spoken back, e.g. "summarise the project".
+    - list_projects: use only when user asks what projects exist.
   temperature: 0.7
-  max_tokens: 150
+  max_tokens: 80
 
 tts:
   engine: piper
@@ -41,20 +46,16 @@ tts:
   voice_model: models/pieper/en_GB-northern_english_male-medium
   speed: 1.0
 
+projects:
+  # Explicit project list. Dann will only know about these projects.
+  # Paths support ~ expansion. Omit this section entirely to fall back to
+  # auto-discovery of all git repos under ~/Git.
+
 mcp:
-  servers: []
-  # Add MCP tool servers here. Each entry starts a subprocess and
-  # exposes its tools to the LLM during conversation.
-  #
-  # Example — a Python-based MCP server:
-  #   - name: weather
-  #     command: python
-  #     args: ["-m", "weather_server"]
-  #
-  # Example — a Node.js MCP server:
-  #   - name: calendar
-  #     command: node
-  #     args: ["path/to/calendar-server/index.js"]
+  servers:
+    - name: claude-code
+      command: python
+      args: ["-m", "src.mcp_servers.claude_code_server"]
 
 ux:
   play_listening_sound: true

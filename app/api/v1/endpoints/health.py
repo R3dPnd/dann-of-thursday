@@ -1,18 +1,21 @@
 """
 Health check endpoints
 """
+import httpx
 from fastapi import APIRouter
 from app.models.schemas import HealthResponse
 from app.core.config import settings
 
 router = APIRouter()
 
+_OLLAMA_URL = "http://localhost:11434/api/tags"
+
 
 @router.get("", response_model=HealthResponse, summary="Health check")
 async def health_check():
     """
     Health check endpoint to verify API is running
-    
+
     Returns:
         HealthResponse: Service health status
     """
@@ -26,13 +29,22 @@ async def health_check():
 @router.get("/ready", summary="Readiness check")
 async def readiness_check():
     """
-    Readiness check endpoint
-    
+    Readiness check — verifies that upstream dependencies are reachable.
+
     Returns:
-        dict: Readiness status
+        dict: Per-service readiness status and overall status
     """
-    # TODO: Add checks for database, external services, etc.
-    return {"status": "ready"}
+    checks: dict = {}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(_OLLAMA_URL, timeout=3.0)
+        checks["ollama"] = "ok" if r.status_code == 200 else "error"
+    except Exception:
+        checks["ollama"] = "unreachable"
+
+    overall = "ready" if all(v == "ok" for v in checks.values()) else "degraded"
+    return {"status": overall, "checks": checks}
 
 
 @router.get("/live", summary="Liveness check")

@@ -22,18 +22,24 @@ def generate_response(
     max_tokens: int = 150,
     tools: list[dict[str, Any]] | None = None,
     mcp: MCPManager | None = None,
+    history: list[dict[str, Any]] | None = None,
 ) -> str:
     """Send prompt to Ollama and return generated text.
 
     When *tools* and *mcp* are provided the model may make tool calls;
     results are fed back automatically until the model emits a final
     text response (up to ``_MAX_TOOL_ROUNDS`` iterations).
+
+    *history* is a list of prior ``{"role": ..., "content": ...}`` messages
+    from the current session, prepended before the current user turn.
     """
     url = f"{base_url.rstrip('/')}/api/chat"
 
     messages: list[dict[str, Any]] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
+    if history:
+        messages.extend(history)
     messages.append({"role": "user", "content": prompt})
 
     for _ in range(_MAX_TOOL_ROUNDS):

@@ -40,7 +40,11 @@ class MCPManager:
     def stop(self) -> None:
         """Disconnect all servers and tear down the event loop."""
         if self._exit_stack:
-            self._run(self._disconnect_all())
+            try:
+                self._run(self._disconnect_all())
+            except Exception:
+                # anyio cancel-scope errors on cross-thread teardown are expected
+                pass
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join(timeout=5)
 

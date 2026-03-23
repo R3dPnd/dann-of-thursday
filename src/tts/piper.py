@@ -10,6 +10,16 @@ try:
 except ImportError:
     _HAS_PIPER_API = False
 
+# Cache loaded voice models so they are not re-initialised on every turn
+_voice_cache: dict[str, "PiperVoice"] = {}
+
+
+def _get_voice(onnx_path: Path) -> "PiperVoice":
+    key = str(onnx_path)
+    if key not in _voice_cache:
+        _voice_cache[key] = PiperVoice.load(onnx_path, use_cuda=False)
+    return _voice_cache[key]
+
 
 def _resolve_onnx_path(voice_model: str | Path) -> Path:
     """Resolve voice model path to .onnx file."""
@@ -27,6 +37,14 @@ def _resolve_onnx_path(voice_model: str | Path) -> Path:
     if not voice.exists():
         raise FileNotFoundError(f"Piper voice model not found: {voice}")
     return voice
+
+
+def warmup(voice_model: str | Path = "models/piper/en_US-lessac-medium") -> None:
+    """Pre-load the Piper voice model so the first synthesis is not slow."""
+    try:
+        _get_voice(_resolve_onnx_path(voice_model))
+    except FileNotFoundError:
+        pass  # Model not yet downloaded — warmup is best-effort
 
 
 def synthesize_speech(
@@ -49,7 +67,7 @@ def synthesize_speech(
     onnx_path = _resolve_onnx_path(voice_model)
     out = output_path or Path(tempfile.gettempdir()) / "dann_tts_output.wav"
 
-    voice = PiperVoice.load(onnx_path, use_cuda=False)
+    voice = _get_voice(onnx_path)
     syn_config = SynthesisConfig(
         length_scale=1.0 / speed if speed != 1.0 else None,
     )

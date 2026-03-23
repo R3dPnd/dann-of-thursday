@@ -44,3 +44,12 @@ tts:
 ux:
   play_listening_sound: true
   play_thinking_sound: false
+
+projects:
+  # Explicit list of projects Dann can open and query.
+  # Paths support ~ expansion. Remove this section to fall back to
+  # auto-discovery of all git repos under ~/Git.
+  - name: my-project
+    path: ~/Git/my-org/my-project
+  - name: another-project
+    path: ~/Git/my-org/another-project

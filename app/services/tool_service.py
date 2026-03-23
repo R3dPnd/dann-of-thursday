@@ -108,14 +108,55 @@ class ToolService:
     async def _run_tool(
         self, tool_name: str, parameters: Dict[str, Any], timeout: int
     ) -> str:
-        """
-        Run the actual tool (placeholder implementation)
-        
-        TODO: Implement actual tool execution
-        """
-        # Simulate tool execution
-        await asyncio.sleep(0.1)
-        return f"Tool {tool_name} executed successfully with parameters: {parameters}"
+        """Run the tool as a subprocess and return its stdout."""
+        cmd = self._build_command(tool_name, parameters)
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=float(timeout)
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.communicate()
+            raise TimeoutError(f"{tool_name} timed out after {timeout}s")
+
+        output = stdout.decode(errors="replace").strip()
+        if proc.returncode != 0:
+            err = stderr.decode(errors="replace").strip()
+            if err:
+                output = f"{output}\n{err}".strip()
+        return output or f"{tool_name} produced no output."
+
+    def _build_command(self, tool_name: str, parameters: Dict[str, Any]) -> list:
+        """Build the subprocess argument list for a given tool."""
+        if tool_name == "nmap":
+            cmd = ["nmap"]
+            scan_type = parameters.get("scan_type", "").lower()
+            if scan_type in ("syn", "tcp", "udp", "ping"):
+                flag_map = {"syn": "-sS", "tcp": "-sT", "udp": "-sU", "ping": "-sn"}
+                cmd.append(flag_map[scan_type])
+            ports = parameters.get("ports", "")
+            if ports:
+                cmd.extend(["-p", ports])
+            cmd.append(parameters["target"])
+            return cmd
+
+        if tool_name == "sqlmap":
+            cmd = ["sqlmap", "-u", parameters["url"], "--batch", "--output-dir=/tmp/sqlmap"]
+            data = parameters.get("data", "")
+            if data:
+                cmd.extend(["--data", data])
+            cookie = parameters.get("cookie", "")
+            if cookie:
+                cmd.extend(["--cookie", cookie])
+            return cmd
+
+        raise ValueError(f"No command builder for tool: {tool_name}")
 
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """

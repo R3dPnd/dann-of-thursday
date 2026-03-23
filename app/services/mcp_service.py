@@ -61,19 +61,8 @@ class MCPService:
 
     async def _handle_tools_list(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle tools/list method"""
-        # TODO: Integrate with actual tool service
-        return {
-            "tools": [
-                {
-                    "name": "nmap",
-                    "description": "Network mapper tool",
-                },
-                {
-                    "name": "sqlmap",
-                    "description": "SQL injection tool",
-                },
-            ]
-        }
+        from app.services.tool_service import ToolService
+        return {"tools": ToolService().get_available_tools()}
 
     async def _handle_resources_list(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle resources/list method"""

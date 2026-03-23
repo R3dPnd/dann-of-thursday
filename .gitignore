@@ -11,3 +11,7 @@ models/*.npz
 __pycache__/
 *.pyc
 *.pyo
+
+# UI
+ui/node_modules/
+ui/dist/
