@@ -1,4 +1,15 @@
 export type Mode = 'idle' | 'normal' | 'code'
+export type PipelineStage = 'idle' | 'wake' | 'recording' | 'thinking' | 'speaking'
+
+export interface VoiceTurn {
+  id: string
+  sessionId: string | null
+  timestamp: Date
+  userText: string
+  dannText: string
+  mode: 'normal' | 'code'
+  project?: string
+}
 
 export interface Project {
   name: string
@@ -28,30 +39,24 @@ export interface DannEvent {
   payload: Record<string, unknown>
 }
 
-export interface MetricRecord {
-  session_id?: string
-  mode?: string
-  blank?: boolean
-  status?: string
-  stt_ms?: number
-  llm_ms?: number
-  tts_ms?: number
-  total_ms?: number
-  recorded_at?: string
-}
-
 export interface MetricSummary {
   period: string
-  total_turns: number
-  blank_turns: number
-  code_turns: number
-  normal_turns: number
-  error_turns: number
-  avg_stt_ms: number | null
-  avg_llm_ms: number | null
-  avg_tts_ms: number | null
-  avg_total_ms: number | null
+  total_calls: number
+  successful_calls: number
+  error_calls: number
+  empty_calls: number
+  avg_response_ms: number | null
+  projects_used: number
   sessions: string[]
+}
+
+export interface ProjectMetric {
+  project: string
+  total: number
+  ok: number
+  error: number
+  empty: number
+  avg_response_ms: number | null
 }
 
 export interface LogEntry {

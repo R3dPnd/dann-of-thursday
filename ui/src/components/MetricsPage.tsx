@@ -14,59 +14,47 @@ import {
 } from 'recharts'
 import { api } from '../lib/api'
 import { useDannStore } from '../hooks/useDannState'
-import type { MetricSummary } from '../types'
-
-interface SessionDay {
-  date: string
-  sessions: number
-}
-
-interface SessionLatency {
-  session_id: string
-  turns: number
-  avg_stt_ms: number | null
-  avg_llm_ms: number | null
-  avg_tts_ms: number | null
-  avg_total_ms: number | null
-}
+import type { MetricSummary, ProjectMetric } from '../types'
 
 export default function MetricsPage() {
   const { metricSummary } = useDannStore()
   const [allTime, setAllTime] = useState<MetricSummary | null>(null)
-  const [byDay, setByDay] = useState<SessionDay[]>([])
-  const [bySession, setBySession] = useState<SessionLatency[]>([])
+  const [byDay, setByDay] = useState<{ date: string; calls: number }[]>([])
+  const [byProject, setByProject] = useState<ProjectMetric[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
     Promise.all([
       api.getMetrics('all'),
-      api.getSessionsByDay(7),
-      api.getLatencyBySession(),
-    ]).then(([summary, days, sessions]) => {
+      api.getCallsByDay(7),
+      api.getByProject(),
+    ]).then(([summary, days, projects]) => {
       setAllTime(summary)
       setByDay(days)
-      setBySession(sessions.slice(-20)) // last 20 sessions
-    }).catch(() => {/* non-fatal */}).finally(() => setLoading(false))
+      setByProject(projects)
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   const summary = allTime ?? metricSummary
 
+  const successRate = summary && summary.total_calls > 0
+    ? `${Math.round((summary.successful_calls / summary.total_calls) * 100)}%`
+    : '—'
+
   const pieData = summary
     ? [
-        { name: 'Normal', value: summary.normal_turns, color: '#22c55e' },
-        { name: 'Code', value: summary.code_turns, color: '#3b82f6' },
-        { name: 'Blank', value: summary.blank_turns, color: '#6b7280' },
-        { name: 'Error', value: summary.error_turns, color: '#ef4444' },
+        { name: 'Success', value: summary.successful_calls, color: '#22c55e' },
+        { name: 'Error', value: summary.error_calls, color: '#ef4444' },
+        { name: 'Empty', value: summary.empty_calls, color: '#6b7280' },
       ].filter(d => d.value > 0)
     : []
 
-  const latencyData = bySession.map(s => ({
-    name: s.session_id.slice(0, 8),
-    STT: s.avg_stt_ms ?? 0,
-    LLM: s.avg_llm_ms ?? 0,
-    TTS: s.avg_tts_ms ?? 0,
-  }))
+  const tooltipStyle = {
+    contentStyle: { backgroundColor: '#1f2937', border: 'none', borderRadius: 6 },
+    labelStyle: { color: '#e5e7eb' },
+    itemStyle: { color: '#60a5fa' },
+  }
 
   if (loading) {
     return (
@@ -81,10 +69,10 @@ export default function MetricsPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total turns', value: summary?.total_turns ?? 0 },
-          { label: 'Sessions', value: summary?.sessions?.length ?? 0 },
-          { label: 'Code turns', value: summary?.code_turns ?? 0 },
-          { label: 'Error turns', value: summary?.error_turns ?? 0 },
+          { label: 'Total calls', value: summary?.total_calls ?? 0 },
+          { label: 'Projects used', value: summary?.projects_used ?? 0 },
+          { label: 'Success rate', value: successRate },
+          { label: 'Avg response', value: summary?.avg_response_ms != null ? `${summary.avg_response_ms} ms` : '—' },
         ].map(({ label, value }) => (
           <div key={label} className="bg-gray-800 rounded-lg p-3 text-center">
             <div className="text-2xl font-bold text-white">{value}</div>
@@ -93,69 +81,48 @@ export default function MetricsPage() {
         ))}
       </div>
 
-      {/* Avg latencies */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: 'Avg STT', value: summary?.avg_stt_ms },
-          { label: 'Avg LLM', value: summary?.avg_llm_ms },
-          { label: 'Avg TTS', value: summary?.avg_tts_ms },
-          { label: 'Avg turn', value: summary?.avg_total_ms },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-gray-800 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-white">
-              {value != null ? `${value} ms` : '—'}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Sessions per day */}
+      {/* Calls per day */}
       {byDay.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">Sessions per day (last 7 days)</h3>
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">Claude calls per day (last 7 days)</h3>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={byDay} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} />
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 6 }}
-                labelStyle={{ color: '#e5e7eb' }}
-                itemStyle={{ color: '#60a5fa' }}
-              />
-              <Bar dataKey="sessions" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+              <Tooltip {...tooltipStyle} />
+              <Bar dataKey="calls" fill="#3b82f6" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {/* Latency breakdown per session */}
-      {latencyData.length > 0 && (
+      {/* Calls per project */}
+      {byProject.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">Avg latency per session (ms)</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={latencyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">Calls per project</h3>
+          <ResponsiveContainer width="100%" height={Math.max(160, byProject.length * 28)}>
+            <BarChart
+              data={byProject}
+              layout="vertical"
+              margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 6 }}
-                labelStyle={{ color: '#e5e7eb' }}
-              />
-              <Legend wrapperStyle={{ fontSize: 12, color: '#9ca3af' }} />
-              <Bar dataKey="STT" stackId="a" fill="#f59e0b" />
-              <Bar dataKey="LLM" stackId="a" fill="#3b82f6" />
-              <Bar dataKey="TTS" stackId="a" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
+              <XAxis type="number" tick={{ fontSize: 11, fill: '#9ca3af' }} allowDecimals={false} />
+              <YAxis type="category" dataKey="project" tick={{ fontSize: 11, fill: '#9ca3af' }} width={140} />
+              <Tooltip {...tooltipStyle} />
+              <Bar dataKey="ok" name="Success" stackId="a" fill="#22c55e" />
+              <Bar dataKey="error" name="Error" stackId="a" fill="#ef4444" />
+              <Bar dataKey="empty" name="Empty" stackId="a" fill="#6b7280" radius={[0, 3, 3, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {/* Mode distribution pie */}
+      {/* Status breakdown pie */}
       {pieData.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">Turn mode distribution</h3>
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">Response status breakdown</h3>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie
@@ -173,19 +140,16 @@ export default function MetricsPage() {
                   <Cell key={entry.name} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 6 }}
-                itemStyle={{ color: '#e5e7eb' }}
-              />
+              <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 6 }} />
               <Legend wrapperStyle={{ fontSize: 12, color: '#9ca3af' }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {summary && summary.total_turns === 0 && (
+      {summary && summary.total_calls === 0 && (
         <div className="text-center text-gray-500 py-12">
-          No turns recorded yet. Start a session to see metrics.
+          No Claude calls recorded yet.
         </div>
       )}
     </div>

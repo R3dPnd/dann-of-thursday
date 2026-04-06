@@ -11,13 +11,18 @@ audio:
   silence_threshold: 0.01 # RMS below this = silence
 
 wake_word:
-  engine: porcupine
-  access_key: OlV3mcUn7ojHD5ccjfILFAozS5GuTPweUHP6ft26sOkO3G/H3P4+Lw== # Get from https://console.picovoice.ai/
-  # builtin_keyword: porcupine  # Use to test without custom .ppn
-  model_path: models/ok_dann.ppn
-  sensitivity: 0.8
-  debounce: 1
+  engine: openwakeword             # openwakeword (no key) or porcupine
+  model: hey_jarvis                # builtin: hey_jarvis | alexa | hey_mycroft | hey_rhasspy
+                                   # swap for custom model once trained: models/ok_dann.onnx
+  threshold: 0.5
+  debounce: 3
   cooldown_ms: 2000
+
+  # Porcupine (unused while engine: openwakeword)
+  # engine: porcupine
+  # access_key: YOUR_KEY_HERE
+  # model_path: models/ok_dann.ppn
+  # sensitivity: 0.8
 
 stt:
   engine: faster_whisper
@@ -50,6 +55,34 @@ projects:
   # Explicit project list. Dann will only know about these projects.
   # Paths support ~ expansion. Omit this section entirely to fall back to
   # auto-discovery of all git repos under ~/Git.
+  - name: dann-of-thursday
+    path: C:/Git/pnd/dann-of-thursday
+  - name: pnd-browser-extensions
+    path: C:/Git/pnd/pnd-browser-extensions
+  - name: pnd-cyber-research
+    path: C:/Git/pnd/pnd-cyber-research
+  - name: pnd-dev-journal
+    path: C:/Git/pnd/pnd-dev-journal
+  - name: pnd-journal
+    path: C:/Git/pnd/pnd-journal
+  - name: pnd-flipper
+    path: C:/Git/pnd/pnd-flipper
+  - name: pnd-front-end-practice
+    path: C:/Git/pnd/pnd-front-end-practice
+  - name: pnd-games
+    path: C:/Git/pnd/pnd-games
+  - name: pnd-leet-code
+    path: C:/Git/pnd/pnd-leet-code
+  - name: pnd-mcp
+    path: C:/Git/pnd/pnd-mcp
+  - name: pnd-pixel-art
+    path: C:/Git/pnd/pnd-pixel-art
+  - name: pnd-practice
+    path: C:/Git/pnd/pnd-practice
+  - name: pnd-resume
+    path: C:/Git/pnd/pnd-resume
+  - name: pnd-scripts
+    path: C:/Git/pnd/pnd-scripts
 
 mcp:
   servers:

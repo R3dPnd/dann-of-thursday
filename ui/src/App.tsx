@@ -9,6 +9,7 @@ import { api } from './lib/api'
 // Lazy-load heavy components
 const MetricsPage = lazy(() => import('./components/MetricsPage'))
 const TerminalPane = lazy(() => import('./components/TerminalPane'))
+const ConversationPanel = lazy(() => import('./components/ConversationPanel'))
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ interface TerminalTab {
   projectName: string
 }
 
-type StaticTab = 'projects' | 'metrics'
+type StaticTab = 'projects' | 'metrics' | 'voice'
 type Tab = StaticTab | TerminalTab
 
 function tabId(t: Tab): string {
@@ -30,6 +31,7 @@ function tabId(t: Tab): string {
 function tabLabel(t: Tab): string {
   if (t === 'projects') return 'Projects'
   if (t === 'metrics') return 'Metrics'
+  if (t === 'voice') return 'Voice'
   return t.projectName
 }
 
@@ -38,7 +40,7 @@ function tabLabel(t: Tab): string {
 export default function App() {
   useDannEvents()
 
-  const [tabs, setTabs] = useState<Tab[]>(['projects', 'metrics'])
+  const [tabs, setTabs] = useState<Tab[]>(['projects', 'voice', 'metrics'])
   const [activeTabId, setActiveTabId] = useState<string>('projects')
 
   const openTerminal = async (projectName: string) => {
@@ -126,6 +128,12 @@ export default function App() {
         <div className={`h-full overflow-y-auto ${activeTabId === 'metrics' ? '' : 'hidden'}`}>
           <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Loading…</div>}>
             <MetricsPage />
+          </Suspense>
+        </div>
+
+        <div className={`h-full overflow-hidden ${activeTabId === 'voice' ? '' : 'hidden'}`}>
+          <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Loading…</div>}>
+            <ConversationPanel />
           </Suspense>
         </div>
 

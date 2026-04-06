@@ -112,7 +112,7 @@ export default function LogPanel() {
   }, [filtered])
 
   return (
-    <div className="border-t border-gray-700 bg-gray-900 flex flex-col">
+    <div className="log-panel bg-gray-900 flex flex-col">
       {/* Header tab */}
       <button
         onClick={handleOpen}

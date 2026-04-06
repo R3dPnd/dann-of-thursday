@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import type { CodeTurn, LogEntry, MetricSummary, Mode, Project, StateSnapshot } from '../types'
+import type { CodeTurn, LogEntry, MetricSummary, Mode, PipelineStage, Project, StateSnapshot, VoiceTurn } from '../types'
 
 const MAX_LOG_ENTRIES = 2000
+const MAX_VOICE_TURNS = 200
 
 interface DannStore {
   // Orchestrator state
@@ -13,15 +14,22 @@ interface DannStore {
   // WebSocket connection
   wsConnected: boolean
 
+  // Voice pipeline stage
+  pipelineStage: PipelineStage
+  // Pending STT text waiting to be paired with an LLM response
+  _pendingStt: string | null
+
   // Projects
   projects: Project[]
+
+  // Voice conversation history (all modes)
+  voiceTurns: VoiceTurn[]
 
   // Per-project CODE-mode turn history (project name → turns)
   codeHistory: Record<string, CodeTurn[]>
 
-  // Metrics (session-scope counters updated from metric events)
+  // Metrics
   metricSummary: MetricSummary | null
-  wakeCount: number
 
   // Live log entries streamed via WebSocket (capped at MAX_LOG_ENTRIES)
   logEntries: LogEntry[]
@@ -42,10 +50,12 @@ export const useDannStore = create<DannStore>((set) => ({
   sessionId: null,
   running: false,
   wsConnected: false,
+  pipelineStage: 'idle',
+  _pendingStt: null,
   projects: [],
+  voiceTurns: [],
   codeHistory: {},
   metricSummary: null,
-  wakeCount: 0,
   logEntries: [],
   unreadErrors: 0,
 
@@ -68,19 +78,50 @@ export const useDannStore = create<DannStore>((set) => ({
         break
 
       case 'session.start':
-        set((state) => ({
-          sessionId: payload.session_id as string,
-          wakeCount: state.wakeCount + 1,
-        }))
+        set({ sessionId: payload.session_id as string, pipelineStage: 'wake' })
         break
 
       case 'session.end':
-        set({ sessionId: null, mode: 'idle' })
+        set({ sessionId: null, mode: 'idle', pipelineStage: 'idle', _pendingStt: null })
         break
+
+      case 'turn.start':
+        set({ pipelineStage: 'recording' })
+        break
+
+      case 'turn.stt': {
+        const text = (payload.text as string) ?? ''
+        if (!text) {
+          set({ pipelineStage: 'idle', _pendingStt: null })
+        } else {
+          set({ pipelineStage: 'thinking', _pendingStt: text })
+        }
+        break
+      }
+
+      case 'turn.llm': {
+        const dannText = (payload.text as string) ?? ''
+        set((state) => {
+          const turn: VoiceTurn = {
+            id: `${Date.now()}-${Math.random()}`,
+            sessionId: (payload.session_id as string | null) ?? state.sessionId,
+            timestamp: new Date(),
+            userText: state._pendingStt ?? '',
+            dannText,
+            mode: 'normal',
+          }
+          const turns = [...state.voiceTurns, turn]
+          if (turns.length > MAX_VOICE_TURNS) turns.splice(0, turns.length - MAX_VOICE_TURNS)
+          return { voiceTurns: turns, pipelineStage: 'speaking', _pendingStt: null }
+        })
+        // After speaking, pipeline returns to idle (approximate — no turn.tts event)
+        setTimeout(() => set((s) => s.pipelineStage === 'speaking' ? { pipelineStage: 'idle' } : {}), 3000)
+        break
+      }
 
       case 'turn.code': {
         const project = payload.project as string
-        const turn: CodeTurn = {
+        const codeTurn: CodeTurn = {
           id: `${Date.now()}-${Math.random()}`,
           timestamp: new Date(),
           task: (payload.task as string) ?? '',
@@ -89,51 +130,44 @@ export const useDannStore = create<DannStore>((set) => ({
           latencyMs: (payload.latency_ms as number) ?? 0,
           sessionId: (payload.session_id as string | null) ?? null,
         }
-        set((state) => ({
-          codeHistory: {
-            ...state.codeHistory,
-            [project]: [...(state.codeHistory[project] ?? []), turn],
-          },
-        }))
-        break
-      }
-
-      case 'metric': {
-        // Update running session metric summary from the latest metric event.
         set((state) => {
-          const prev = state.metricSummary
-          const mode = payload.mode as string | undefined
-          const blank = !!(payload.blank)
-          const status = payload.status as string | undefined
-
-          const total = (prev?.total_turns ?? 0) + 1
-          const blankTurns = (prev?.blank_turns ?? 0) + (blank ? 1 : 0)
-          const codeTurns = (prev?.code_turns ?? 0) + (mode === 'CODE' ? 1 : 0)
-          const normalTurns = (prev?.normal_turns ?? 0) + (mode === 'NORMAL' ? 1 : 0)
-          const errorTurns = (prev?.error_turns ?? 0) + (status === 'error' ? 1 : 0)
-
-          const avg = (prev: number | null, next: unknown, count: number): number | null => {
-            if (typeof next !== 'number') return prev
-            if (prev === null) return next
-            return Math.round((prev * (count - 1) + next) / count)
+          const voiceTurn: VoiceTurn = {
+            id: codeTurn.id,
+            sessionId: codeTurn.sessionId,
+            timestamp: codeTurn.timestamp,
+            userText: state._pendingStt ?? codeTurn.task,
+            dannText: codeTurn.response,
+            mode: 'code',
+            project,
           }
-
+          const prev = state.metricSummary
+          const status = codeTurn.status
+          const total = (prev?.total_calls ?? 0) + 1
+          const avg = (p: number | null, next: number, n: number) =>
+            p === null ? next : Math.round((p * (n - 1) + next) / n)
+          const voiceTurns = [...state.voiceTurns, voiceTurn]
+          if (voiceTurns.length > MAX_VOICE_TURNS) voiceTurns.splice(0, voiceTurns.length - MAX_VOICE_TURNS)
           return {
+            codeHistory: {
+              ...state.codeHistory,
+              [project]: [...(state.codeHistory[project] ?? []), codeTurn],
+            },
+            voiceTurns,
+            pipelineStage: 'speaking' as PipelineStage,
+            _pendingStt: null,
             metricSummary: {
               period: 'session',
-              total_turns: total,
-              blank_turns: blankTurns,
-              code_turns: codeTurns,
-              normal_turns: normalTurns,
-              error_turns: errorTurns,
-              avg_stt_ms: avg(prev?.avg_stt_ms ?? null, payload.stt_ms, total),
-              avg_llm_ms: avg(prev?.avg_llm_ms ?? null, payload.llm_ms, total),
-              avg_tts_ms: avg(prev?.avg_tts_ms ?? null, payload.tts_ms, total),
-              avg_total_ms: avg(prev?.avg_total_ms ?? null, payload.total_ms, total),
+              total_calls: total,
+              successful_calls: (prev?.successful_calls ?? 0) + (status === 'ok' ? 1 : 0),
+              error_calls: (prev?.error_calls ?? 0) + (status === 'error' ? 1 : 0),
+              empty_calls: (prev?.empty_calls ?? 0) + (status === 'empty' ? 1 : 0),
+              avg_response_ms: avg(prev?.avg_response_ms ?? null, codeTurn.latencyMs, total),
+              projects_used: new Set([...Object.keys(state.codeHistory), project]).size,
               sessions: prev?.sessions ?? [],
             },
           }
         })
+        setTimeout(() => set((s) => s.pipelineStage === 'speaking' ? { pipelineStage: 'idle' } : {}), 3000)
         break
       }
 
@@ -159,7 +193,6 @@ export const useDannStore = create<DannStore>((set) => ({
       }
 
       default:
-        // Capture all INFO-level events (session.start/end, state.changed) as log entries.
         if (['session.start', 'session.end', 'state.changed'].includes(type)) {
           const entry: LogEntry = {
             timestamp: new Date().toISOString(),
@@ -179,10 +212,7 @@ export const useDannStore = create<DannStore>((set) => ({
   },
 
   setWsConnected: (connected) => set({ wsConnected: connected }),
-
   setProjects: (projects) => set({ projects }),
-
   setMetricSummary: (summary) => set({ metricSummary: summary }),
-
   clearUnreadErrors: () => set({ unreadErrors: 0 }),
 }))

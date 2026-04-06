@@ -27,14 +27,14 @@ export const api = {
   openProject: (name: string) =>
     post<{ result: string }>(`/projects/${encodeURIComponent(name)}/open`),
 
-  getMetrics: (period: 'session' | 'day' | 'week' | 'all' = 'all') =>
+  getMetrics: (period: 'day' | 'week' | 'all' = 'all') =>
     get<MetricSummary>(`/metrics?period=${period}`),
 
-  getSessionsByDay: (days = 7) =>
-    get<{ date: string; sessions: number }[]>(`/metrics/sessions-by-day?days=${days}`),
+  getCallsByDay: (days = 7) =>
+    get<{ date: string; calls: number }[]>(`/metrics/calls-by-day?days=${days}`),
 
-  getLatencyBySession: () =>
-    get<{ session_id: string; turns: number; avg_stt_ms: number | null; avg_llm_ms: number | null; avg_tts_ms: number | null; avg_total_ms: number | null }[]>('/metrics/latency-by-session'),
+  getByProject: () =>
+    get<{ project: string; total: number; ok: number; error: number; empty: number; avg_response_ms: number | null }[]>('/metrics/by-project'),
 
   createTerminal: (projectName: string, rows = 40, cols = 120) =>
     post<{ session_id: string; project_name: string; project_path: string; alive: boolean }>(
@@ -44,6 +44,8 @@ export const api = {
 
   closeTerminal: (sessionId: string) =>
     fetch(`/api/v1/terminals/${sessionId}`, { method: 'DELETE' }).catch(() => {}),
+
+  triggerVoice: () => post<{ triggered: boolean }>('/voice/trigger'),
 
   getLogs: (params?: { level?: string; module?: string; search?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams()

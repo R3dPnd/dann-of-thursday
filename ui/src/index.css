@@ -2,29 +2,234 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Silkscreen';
+  src: url('/fonts/Silkscreen-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Silkscreen';
+  src: url('/fonts/Silkscreen-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
 @layer base {
   body {
-    @apply bg-zinc-950 text-zinc-100 antialiased;
+    @apply bg-zinc-950 text-zinc-100;
+    font-family: 'Silkscreen', monospace;
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.07) 2px,
+      rgba(0, 0, 0, 0.07) 4px
+    );
   }
 
-  ::-webkit-scrollbar {
-    @apply w-1.5;
+  input:focus, select:focus {
+    outline: none;
+    box-shadow: 0 0 0 1px #00ddff, 0 0 8px #00ddff55;
   }
-  ::-webkit-scrollbar-track {
-    @apply bg-zinc-900;
-  }
+
+  ::-webkit-scrollbar       { width: 6px; }
+  ::-webkit-scrollbar-track { background: #06060a; }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-zinc-700 hover:bg-zinc-600;
+    background: #00ddff33;
+    border-radius: 9999px;
   }
+  ::-webkit-scrollbar-thumb:hover { background: #00ddff77; }
 }
+
+/* ── Section accent borders ───────────────────────────────────────────────── */
+
+/* Status bar — electric blue */
+header.status-bar {
+  border-bottom: 1px solid #0044ff55;
+  box-shadow: 0 1px 16px #0044ff20;
+}
+
+/* Metrics bar — orange */
+.metrics-bar {
+  border-bottom: 1px solid #ff990044;
+  box-shadow: 0 1px 12px #ff990018;
+}
+.metrics-bar .metrics-label { color: #ff9900; text-shadow: 0 0 8px #ff990088; }
+.metrics-bar .stat-value     { color: #ffbb55; }
+
+/* Projects panel — blue active card glow */
+.border-blue-600 {
+  border-color: #2266ff !important;
+  box-shadow: 0 0 12px #0044ff44, inset 0 0 8px #0044ff0a;
+}
+
+/* Voice/conversation — teal Dann bubbles, blue user bubbles */
+.voice-dann-bubble {
+  background: #00ffdd0e;
+  border: 1px solid #00ffdd33;
+  color: #aaffee;
+  box-shadow: inset 0 0 6px #00ffdd08;
+}
+.voice-user-bubble {
+  background: #0044ff18;
+  border: 1px solid #2266ff44;
+  color: #bbddff;
+}
+
+/* Log panel — red top border */
+.log-panel {
+  border-top: 1px solid #ff337744;
+  box-shadow: 0 -1px 12px #ff337718;
+}
+
+/* Listening pill — green glow */
+.bg-green-600 {
+  background-color: #00bb55 !important;
+  box-shadow: 0 0 10px #00ff8888, 0 0 20px #00ff8844;
+}
+
+/* Code mode pill — violet (highlight color) */
+.bg-violet-600 {
+  background-color: #8800ff !important;
+  box-shadow: 0 0 10px #aa44ff88, 0 0 20px #aa44ff44;
+}
+
+/* Idle pill */
+.bg-zinc-700 { background-color: #111b35 !important; }
+
+/* ── Utilities ────────────────────────────────────────────────────────────── */
 
 @layer utilities {
   .pulse-dot {
-    animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    animation: pulse-dot 1.5s ease-in-out infinite;
+    box-shadow: 0 0 6px currentColor;
   }
+  .text-neon-blue    { color: #4488ff; text-shadow: 0 0 8px #2266ff, 0 0 20px #0044ff88; }
+  .text-neon-cyan    { color: #00ddff; text-shadow: 0 0 8px #00ddff, 0 0 20px #00ddff66; }
+  .text-neon-teal    { color: #00ffdd; text-shadow: 0 0 8px #00ffdd, 0 0 20px #00ffdd66; }
+  .text-neon-green   { color: #00ff88; text-shadow: 0 0 8px #00ff88, 0 0 20px #00ff8866; }
+  .text-neon-orange  { color: #ff9900; text-shadow: 0 0 8px #ff9900, 0 0 20px #ff990066; }
+  .text-neon-violet  { color: #aa44ff; text-shadow: 0 0 8px #aa44ff, 0 0 20px #aa44ff66; }
+  .text-neon-magenta { color: #ff55ff; text-shadow: 0 0 8px #ff55ff, 0 0 20px #ff55ff66; }
+  .text-neon-red     { color: #ff3377; text-shadow: 0 0 8px #ff3377, 0 0 20px #ff337766; }
 }
 
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.3; transform: scale(0.85); }
+}
+
+@keyframes flicker {
+  0%, 95%, 100% { opacity: 1; }
+  96%            { opacity: 0.82; }
+  97%            { opacity: 1; }
+  98%            { opacity: 0.88; }
+  99%            { opacity: 1; }
+}
+
+/* Chart tooltips */
+.recharts-tooltip-wrapper {
+  font-family: 'Silkscreen', monospace !important;
+  font-size: 11px !important;
+}
+
+/* ── Voice state orbs ─────────────────────────────────────────────────────── */
+
+.dann-orb {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* Idle — dim cyan, slow breathing */
+.dann-orb-idle {
+  border: 2px solid #00ddff33;
+  background: radial-gradient(circle at center, #00ddff0d 0%, transparent 70%);
+  box-shadow: 0 0 16px #00ddff1a, inset 0 0 12px #00ddff0a;
+  animation: dann-breathe 3s ease-in-out infinite;
+}
+@keyframes dann-breathe {
+  0%, 100% { opacity: 0.45; box-shadow: 0 0 12px #00ddff18, inset 0 0 10px #00ddff08; }
+  50%       { opacity: 1;    box-shadow: 0 0 32px #00ddff44, inset 0 0 20px #00ddff18; }
+}
+
+/* Wake — orange burst, fast pulse */
+.dann-orb-wake {
+  border: 2px solid #ff9900cc;
+  background: radial-gradient(circle at center, #ff990022 0%, transparent 70%);
+  box-shadow: 0 0 32px #ff990077, inset 0 0 16px #ff990022;
+  animation: dann-wake 0.7s ease-in-out infinite alternate;
+}
+@keyframes dann-wake {
+  from { box-shadow: 0 0 20px #ff990055; transform: scale(0.96); }
+  to   { box-shadow: 0 0 48px #ff9900aa; transform: scale(1.04); }
+}
+
+/* Recording — red core + two expanding rings */
+.dann-orb-recording {
+  border: 2px solid #ff3377cc;
+  background: radial-gradient(circle at center, #ff337722 0%, transparent 70%);
+  box-shadow: 0 0 24px #ff337755;
+  animation: dann-record-core 1.2s ease-in-out infinite;
+}
+.dann-orb-recording::before,
+.dann-orb-recording::after {
+  content: '';
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  border: 1px solid #ff337766;
+  animation: dann-ring-out 1.8s ease-out infinite;
+}
+.dann-orb-recording::after {
+  inset: -32px;
+  border-color: #ff337733;
+  animation-delay: 0.9s;
+}
+@keyframes dann-record-core {
+  0%, 100% { box-shadow: 0 0 18px #ff337744; }
+  50%       { box-shadow: 0 0 36px #ff337788; }
+}
+@keyframes dann-ring-out {
+  0%   { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0;   transform: scale(1.6); }
+}
+
+/* Thinking — blue spinner arc */
+.dann-orb-thinking {
+  border: 3px solid #4488ff22;
+  border-top-color: #4488ff;
+  background: radial-gradient(circle at center, #4488ff0a 0%, transparent 70%);
+  box-shadow: 0 0 20px #4488ff33;
+  animation: dann-spin 0.9s linear infinite;
+}
+@keyframes dann-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Speaking — teal equalizer bars */
+.dann-equalizer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  width: 88px;
+  height: 88px;
+  padding: 20px 10px 10px;
+}
+.dann-eq-bar {
+  flex: 1;
+  min-height: 8px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(to top, #00ffdd, #00ffdd88);
+  box-shadow: 0 0 8px #00ffdd77;
+  animation: dann-eq 0.8s ease-in-out infinite alternate;
+}
+@keyframes dann-eq {
+  from { height: 8px;  opacity: 0.45; }
+  to   { height: 54px; opacity: 1; }
 }

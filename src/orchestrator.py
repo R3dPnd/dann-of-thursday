@@ -479,33 +479,51 @@ class Orchestrator:
             print("[dann] MCP server ready.", flush=True)
 
         # Wake word detector
-        model_path = Path(self._wake_cfg.get("model_path", "models/ok_dann.ppn"))
-        builtin_keyword = self._wake_cfg.get("builtin_keyword")
+        wake_engine = self._wake_cfg.get("engine", "porcupine")
 
-        if not builtin_keyword and not model_path.exists():
-            raise FileNotFoundError(
-                f"Wake word model not found: {model_path}. "
-                "Set builtin_keyword: porcupine in config to test with a built-in keyword."
+        if wake_engine == "openwakeword":
+            from src.wakeword.openwakeword_detector import OpenWakeWordDetector
+            wake_model = self._wake_cfg.get("model", "hey_jarvis")
+            wake_phrase = str(wake_model)
+            self._detector = OpenWakeWordDetector(
+                model_name=wake_model,
+                on_wake=self._on_wake,
+                threshold=self._wake_cfg.get("threshold", 0.5),
+                debounce=self._wake_cfg.get("debounce", 3),
+                cooldown_s=self._wake_cfg.get("cooldown_ms", 2000) / 1000,
+                sample_rate=self._audio_cfg.get("sample_rate", 16000),
+                device=self._audio_cfg.get("input_device"),
             )
+        else:
+            # Porcupine
+            model_path = Path(self._wake_cfg.get("model_path", "models/ok_dann.ppn"))
+            builtin_keyword = self._wake_cfg.get("builtin_keyword")
+            wake_phrase = builtin_keyword or "ok Dann"
 
-        access_key = self._wake_cfg.get("access_key")
-        if not access_key:
-            raise ValueError(
-                "Porcupine access_key required. Get one from https://console.picovoice.ai/"
+            if not builtin_keyword and not model_path.exists():
+                raise FileNotFoundError(
+                    f"Wake word model not found: {model_path}. "
+                    "Set builtin_keyword: porcupine in config to test with a built-in keyword."
+                )
+
+            access_key = self._wake_cfg.get("access_key")
+            if not access_key:
+                raise ValueError(
+                    "Porcupine access_key required. Get one from https://console.picovoice.ai/"
+                )
+
+            self._detector = WakeWordDetector(
+                model_path=model_path,
+                on_wake=self._on_wake,
+                access_key=access_key,
+                builtin_keyword=builtin_keyword,
+                sensitivity=self._wake_cfg.get("sensitivity", 0.5),
+                debounce=self._wake_cfg.get("debounce", 2),
+                cooldown_s=self._wake_cfg.get("cooldown_ms", 2000) / 1000,
+                sample_rate=self._audio_cfg.get("sample_rate", 16000),
+                block_size=512,
+                device=self._audio_cfg.get("input_device"),
             )
-
-        self._detector = WakeWordDetector(
-            model_path=model_path,
-            on_wake=self._on_wake,
-            access_key=access_key,
-            builtin_keyword=builtin_keyword,
-            sensitivity=self._wake_cfg.get("sensitivity", 0.5),
-            debounce=self._wake_cfg.get("debounce", 2),
-            cooldown_s=self._wake_cfg.get("cooldown_ms", 2000) / 1000,
-            sample_rate=self._audio_cfg.get("sample_rate", 16000),
-            block_size=512,
-            device=self._audio_cfg.get("input_device"),
-        )
 
         # Pre-load models
         print("[dann] Loading models...", flush=True)
@@ -525,7 +543,6 @@ class Orchestrator:
             "session_id": None,
         })
 
-        wake_phrase = builtin_keyword or "ok Dann"
         print(f"[dann] Listening for '{wake_phrase}'... (Ctrl+C to stop)", flush=True)
         self._detector.start()
 

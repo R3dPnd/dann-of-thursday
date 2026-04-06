@@ -8,15 +8,16 @@ bytes between the browser (xterm.js) and the PTY.
 
 from __future__ import annotations
 
-import fcntl
 import os
-import struct
-import termios
+import sys
 import threading
 import uuid
 from typing import Any
 
-import ptyprocess
+_PTY_SUPPORTED = sys.platform != "win32"
+
+if _PTY_SUPPORTED:
+    import ptyprocess
 
 # session_id → TerminalSession
 _sessions: dict[str, "TerminalSession"] = {}
@@ -28,9 +29,11 @@ class TerminalSession:
         self.session_id = session_id
         self.project_name = project_name
         self.project_path = project_path
-        self._proc: ptyprocess.PtyProcess | None = None
+        self._proc: "ptyprocess.PtyProcess | None" = None
 
     def start(self, rows: int = 24, cols: int = 80) -> None:
+        if not _PTY_SUPPORTED:
+            raise NotImplementedError("PTY terminals are not supported on Windows.")
         env = {**os.environ, "TERM": "xterm-256color", "COLORTERM": "truecolor"}
         self._proc = ptyprocess.PtyProcess.spawn(
             ["claude"],

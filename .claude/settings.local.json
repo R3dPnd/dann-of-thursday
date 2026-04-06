@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell:*)",
+      "Bash(ollama list:*)",
+      "Bash(.venv/Scripts/python.exe -m src.main)",
+      "Bash(ls \"C:/Git/pnd/dann-of-thursday/requirements\"*)",
+      "Bash(.venv/Scripts/pip.exe install:*)",
+      "Bash(curl:*)",
+      "Bash(NO_VOICE=1 .venv/Scripts/python.exe -m app.main)",
+      "Bash(powershell.exe:*)",
+      "Bash(cp \"C:/Git/pnd/pnd-resume/client/public/fonts/Silkscreen-Regular.ttf\" \"C:/Git/pnd/dann-of-thursday/ui/public/fonts/Silkscreen-Regular.ttf\")",
+      "Bash(cp \"C:/Git/pnd/pnd-resume/client/public/fonts/Silkscreen-Bold.ttf\" \"C:/Git/pnd/dann-of-thursday/ui/public/fonts/Silkscreen-Bold.ttf\")",
+      "Bash(cp \"C:/Git/pnd/pnd-resume/client/public/fonts/Silkscreen-Regular.ttf\" \"C:/Git/pnd/dann-of-thursday/ui/public/fonts/\")",
+      "Bash(cp \"C:/Git/pnd/pnd-resume/client/public/fonts/Silkscreen-Bold.ttf\" \"C:/Git/pnd/dann-of-thursday/ui/public/fonts/\")",
+      "Bash(.venv/Scripts/python.exe -c \"import pvporcupine; print\\('porcupine ok'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import faster_whisper; print\\('whisper ok'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import piper; print\\('piper ok'\\)\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/pip show:*)"
+    ]
+  }
+}
