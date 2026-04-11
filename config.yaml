@@ -11,18 +11,14 @@ audio:
   silence_threshold: 0.01 # RMS below this = silence
 
 wake_word:
-  engine: openwakeword             # openwakeword (no key) or porcupine
-  model: hey_jarvis                # builtin: hey_jarvis | alexa | hey_mycroft | hey_rhasspy
-                                   # swap for custom model once trained: models/ok_dann.onnx
-  threshold: 0.5
-  debounce: 3
+  engine: openwakeword
+  model: models/ok_dann.onnx                # say "hey Jarvis" to activate
+  threshold: 0.7
+  debounce: 4
   cooldown_ms: 2000
 
-  # Porcupine (unused while engine: openwakeword)
-  # engine: porcupine
-  # access_key: YOUR_KEY_HERE
-  # model_path: models/ok_dann.ppn
-  # sensitivity: 0.8
+  # Swap model to use custom trained wake word:
+  # model: models/ok_dann.onnx
 
 stt:
   engine: faster_whisper
@@ -57,18 +53,21 @@ projects:
   # auto-discovery of all git repos under ~/Git.
   - name: dann-of-thursday
     path: C:/Git/pnd/dann-of-thursday
+    run: .venv/Scripts/python.exe dann.py dev
   - name: pnd-browser-extensions
     path: C:/Git/pnd/pnd-browser-extensions
   - name: pnd-cyber-research
     path: C:/Git/pnd/pnd-cyber-research
   - name: pnd-dev-journal
     path: C:/Git/pnd/pnd-dev-journal
+    run: npm start --prefix client-app
   - name: pnd-journal
     path: C:/Git/pnd/pnd-journal
   - name: pnd-flipper
     path: C:/Git/pnd/pnd-flipper
   - name: pnd-front-end-practice
     path: C:/Git/pnd/pnd-front-end-practice
+    run: npm start --prefix client-app
   - name: pnd-games
     path: C:/Git/pnd/pnd-games
   - name: pnd-leet-code
@@ -81,6 +80,7 @@ projects:
     path: C:/Git/pnd/pnd-practice
   - name: pnd-resume
     path: C:/Git/pnd/pnd-resume
+    run: npm start --prefix client
   - name: pnd-scripts
     path: C:/Git/pnd/pnd-scripts
 

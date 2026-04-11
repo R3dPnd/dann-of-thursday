@@ -1,4 +1,4 @@
-import type { LogEntry, MetricSummary, Project, StateSnapshot } from '../types'
+import type { LogEntry, MetricSummary, Project, RunStatus, StateSnapshot } from '../types'
 
 const BASE = '/api/v1'
 
@@ -46,6 +46,10 @@ export const api = {
     fetch(`/api/v1/terminals/${sessionId}`, { method: 'DELETE' }).catch(() => {}),
 
   triggerVoice: () => post<{ triggered: boolean }>('/voice/trigger'),
+
+  getRunStatus: (name: string) => get<RunStatus>(`/runs/${encodeURIComponent(name)}/status`),
+  startRun: (name: string) => post<RunStatus>(`/runs/${encodeURIComponent(name)}/start`),
+  stopRun: (name: string) => post<{ status: string; project_name: string }>(`/runs/${encodeURIComponent(name)}/stop`),
 
   getLogs: (params?: { level?: string; module?: string; search?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams()

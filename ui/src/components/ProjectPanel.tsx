@@ -1,24 +1,120 @@
-import { useState } from 'react'
-import type { Project } from '../types'
+import { useEffect, useState } from 'react'
+import type { Project, RunStatus } from '../types'
 import { useDannStore } from '../hooks/useDannState'
 import { TerminalOutput } from './TerminalOutput'
+import { api } from '../lib/api'
+
+function RunButton({
+  project,
+  onRunOpened,
+}: {
+  project: Project
+  onRunOpened: (name: string) => void
+}) {
+  const [status, setStatus] = useState<RunStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  // Poll status every 3 s while mounted
+  useEffect(() => {
+    let alive = true
+    const poll = async () => {
+      try {
+        const s = await api.getRunStatus(project.name)
+        if (alive) setStatus(s)
+      } catch {
+        // no run config — component shouldn't even render, but be safe
+      }
+    }
+    poll()
+    const id = setInterval(poll, 3000)
+    return () => { alive = false; clearInterval(id) }
+  }, [project.name])
+
+  const handleStart = async () => {
+    setBusy(true)
+    try {
+      await api.startRun(project.name)
+      setStatus(await api.getRunStatus(project.name))
+      onRunOpened(project.name)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleStop = async () => {
+    setBusy(true)
+    try {
+      await api.stopRun(project.name)
+      setStatus(await api.getRunStatus(project.name))
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const running = status?.alive ?? false
+
+  return (
+    <div className="flex items-center gap-1.5 flex-shrink-0">
+      {/* Status dot */}
+      <span
+        className={`inline-block h-2 w-2 rounded-full flex-shrink-0 ${
+          running ? 'bg-green-400' : 'bg-zinc-600'
+        }`}
+        title={running ? 'Running' : 'Stopped'}
+      />
+
+      {running ? (
+        <>
+          <button
+            onClick={() => onRunOpened(project.name)}
+            className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+            title="View output"
+          >
+            Logs
+          </button>
+          <button
+            onClick={handleStop}
+            disabled={busy}
+            className="rounded bg-red-900/60 px-2 py-1 text-xs text-red-300 hover:bg-red-800/60 disabled:opacity-50"
+            title="Stop process"
+          >
+            Stop
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={handleStart}
+          disabled={busy}
+          className="rounded bg-green-900/60 px-2 py-1 text-xs text-green-300 hover:bg-green-800/60 disabled:opacity-50"
+          title={`Run: ${project.run}`}
+        >
+          Run
+        </button>
+      )}
+    </div>
+  )
+}
 
 function ProjectCard({
   project,
   isActive,
   onOpenTerminal,
+  onRunOpened,
 }: {
   project: Project
   isActive: boolean
   onOpenTerminal: (name: string) => void
+  onRunOpened: (name: string) => void
 }) {
   const codeHistory = useDannStore((s) => s.codeHistory)
   const turns = codeHistory[project.name] ?? []
   const [expanded, setExpanded] = useState(false)
 
   const lastTurn = turns[turns.length - 1]
-
-  const handleOpen = () => onOpenTerminal(project.name)
 
   return (
     <div
@@ -41,10 +137,7 @@ function ProjectCard({
         {/* Name + path */}
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium text-zinc-100">{project.name}</p>
-          <p
-            className="truncate text-xs text-zinc-500"
-            title={project.path}
-          >
+          <p className="truncate text-xs text-zinc-500" title={project.path}>
             {project.path}
           </p>
         </div>
@@ -63,9 +156,14 @@ function ProjectCard({
           </span>
         )}
 
+        {/* Run button (only if project has a run config) */}
+        {project.run && (
+          <RunButton project={project} onRunOpened={onRunOpened} />
+        )}
+
         {/* Open terminal tab */}
         <button
-          onClick={handleOpen}
+          onClick={() => onOpenTerminal(project.name)}
           className="flex-shrink-0 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
           title="Open Claude Code in a browser terminal tab"
         >
@@ -96,7 +194,13 @@ function ProjectCard({
   )
 }
 
-export function ProjectPanel({ onOpenTerminal }: { onOpenTerminal: (name: string) => void }) {
+export function ProjectPanel({
+  onOpenTerminal,
+  onRunOpened,
+}: {
+  onOpenTerminal: (name: string) => void
+  onRunOpened: (name: string) => void
+}) {
   const projects = useDannStore((s) => s.projects)
   const activeProject = useDannStore((s) => s.project)
 
@@ -117,6 +221,7 @@ export function ProjectPanel({ onOpenTerminal }: { onOpenTerminal: (name: string
           project={project}
           isActive={activeProject === project.name}
           onOpenTerminal={onOpenTerminal}
+          onRunOpened={onRunOpened}
         />
       ))}
     </div>

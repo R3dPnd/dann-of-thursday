@@ -4,6 +4,9 @@ PTY terminal session management.
 Each session spawns ``claude`` in a project directory inside a pseudo-terminal
 and exposes read/write/resize operations. The FastAPI WebSocket endpoint proxies
 bytes between the browser (xterm.js) and the PTY.
+
+Windows: uses pywinpty (ConPTY backend).
+Linux/Mac: uses ptyprocess.
 """
 
 from __future__ import annotations
@@ -14,9 +17,11 @@ import threading
 import uuid
 from typing import Any
 
-_PTY_SUPPORTED = sys.platform != "win32"
+_WINDOWS = sys.platform == "win32"
 
-if _PTY_SUPPORTED:
+if _WINDOWS:
+    import winpty
+else:
     import ptyprocess
 
 # session_id → TerminalSession
@@ -29,28 +34,45 @@ class TerminalSession:
         self.session_id = session_id
         self.project_name = project_name
         self.project_path = project_path
-        self._proc: "ptyprocess.PtyProcess | None" = None
+        self._proc: "winpty.PtyProcess | ptyprocess.PtyProcess | None" = None
 
     def start(self, rows: int = 24, cols: int = 80) -> None:
-        if not _PTY_SUPPORTED:
-            raise NotImplementedError("PTY terminals are not supported on Windows.")
         env = {**os.environ, "TERM": "xterm-256color", "COLORTERM": "truecolor"}
-        self._proc = ptyprocess.PtyProcess.spawn(
-            ["claude"],
-            cwd=self.project_path,
-            dimensions=(rows, cols),
-            env=env,
-        )
+        if _WINDOWS:
+            self._proc = winpty.PtyProcess.spawn(
+                "claude",
+                cwd=self.project_path,
+                dimensions=(rows, cols),
+                env=env,
+            )
+        else:
+            self._proc = ptyprocess.PtyProcess.spawn(
+                ["claude"],
+                cwd=self.project_path,
+                dimensions=(rows, cols),
+                env=env,
+            )
 
     def read(self, size: int = 4096) -> bytes:
         """Blocking read from the PTY. Raises EOFError when the process exits."""
         if self._proc is None:
             raise EOFError("not started")
+        if _WINDOWS:
+            if self._proc.eof():
+                raise EOFError("process exited")
+            data = self._proc.read(size)
+            if data is None:
+                raise EOFError("process exited")
+            return data if isinstance(data, bytes) else data.encode("utf-8", errors="replace")
         return self._proc.read(size)
 
     def write(self, data: bytes) -> None:
         if self._proc is not None and self._proc.isalive():
-            self._proc.write(data)
+            if _WINDOWS:
+                text = data.decode("utf-8", errors="replace")
+                self._proc.write(text)
+            else:
+                self._proc.write(data)
 
     def resize(self, rows: int, cols: int) -> None:
         if self._proc is not None and self._proc.isalive():
@@ -73,7 +95,7 @@ class TerminalSession:
         }
 
 
-def create_session(project_name: str, project_path: str, rows: int = 24, cols: int = 80) -> TerminalSession:
+def create_session(project_name: str, project_path: str, rows: int = 50, cols: int = 220) -> TerminalSession:
     session_id = str(uuid.uuid4())
     session = TerminalSession(session_id, project_name, project_path)
     session.start(rows=rows, cols=cols)

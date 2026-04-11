@@ -10,18 +10,25 @@ import { api } from './lib/api'
 const MetricsPage = lazy(() => import('./components/MetricsPage'))
 const TerminalPane = lazy(() => import('./components/TerminalPane'))
 const ConversationPanel = lazy(() => import('./components/ConversationPanel'))
+const RunOutputPane = lazy(() => import('./components/RunOutputPane'))
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
 interface TerminalTab {
   kind: 'terminal'
-  id: string          // unique tab id
-  sessionId: string   // backend PTY session id
+  id: string
+  sessionId: string
+  projectName: string
+}
+
+interface RunTab {
+  kind: 'run'
+  id: string
   projectName: string
 }
 
 type StaticTab = 'projects' | 'metrics' | 'voice'
-type Tab = StaticTab | TerminalTab
+type Tab = StaticTab | TerminalTab | RunTab
 
 function tabId(t: Tab): string {
   if (typeof t === 'string') return t
@@ -32,6 +39,7 @@ function tabLabel(t: Tab): string {
   if (t === 'projects') return 'Projects'
   if (t === 'metrics') return 'Metrics'
   if (t === 'voice') return 'Voice'
+  if (t.kind === 'run') return `▶ ${t.projectName}`
   return t.projectName
 }
 
@@ -69,11 +77,25 @@ export default function App() {
     }
   }
 
-  const closeTab = (tab: TerminalTab) => {
-    // Tell the backend to clean up the PTY session
-    api.closeTerminal(tab.sessionId).catch(() => {})
+  const closeTab = (tab: TerminalTab | RunTab) => {
+    if (tab.kind === 'terminal') {
+      api.closeTerminal(tab.sessionId).catch(() => {})
+    }
     setTabs((prev) => prev.filter((t) => tabId(t) !== tab.id))
     if (activeTabId === tab.id) setActiveTabId('projects')
+  }
+
+  const openRunOutput = (projectName: string) => {
+    const existing = tabs.find(
+      (t): t is RunTab => typeof t !== 'string' && t.kind === 'run' && t.projectName === projectName
+    )
+    if (existing) {
+      setActiveTabId(existing.id)
+      return
+    }
+    const newTab: RunTab = { kind: 'run', id: `run-${projectName}`, projectName }
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(newTab.id)
   }
 
   return (
@@ -86,7 +108,9 @@ export default function App() {
         {tabs.map((tab) => {
           const id = tabId(tab)
           const isActive = id === activeTabId
-          const isTerminal = typeof tab !== 'string'
+
+          const isCloseable = typeof tab !== 'string'
+          const isRunTab = typeof tab !== 'string' && tab.kind === 'run'
 
           return (
             <div
@@ -98,15 +122,18 @@ export default function App() {
               }`}
               onClick={() => setActiveTabId(id)}
             >
-              {isTerminal && (
+              {!isRunTab && typeof tab !== 'string' && (
                 <span className="text-[10px] text-emerald-400 font-mono">{'>'}_</span>
               )}
+              {isRunTab && (
+                <span className="text-[10px] text-green-400">▶</span>
+              )}
               {tabLabel(tab)}
-              {isTerminal && (
+              {isCloseable && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); closeTab(tab as TerminalTab) }}
+                  onClick={(e) => { e.stopPropagation(); closeTab(tab as TerminalTab | RunTab) }}
                   className="ml-1 text-gray-600 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity leading-none"
-                  title="Close terminal"
+                  title="Close"
                 >
                   ×
                 </button>
@@ -116,36 +143,51 @@ export default function App() {
         })}
       </nav>
 
-      {/* Tab content */}
-      <main className="flex-1 overflow-hidden">
-        {/* Static panels — keep mounted so state survives tab switching */}
-        <div className={`h-full overflow-y-auto ${activeTabId === 'projects' ? '' : 'hidden'}`}>
+      {/* Tab content — all panels stacked absolutely so display:none never nukes canvas contexts */}
+      <main className="flex-1 overflow-hidden relative">
+        <div className={`absolute inset-0 overflow-y-auto ${activeTabId === 'projects' ? '' : 'opacity-0 pointer-events-none'}`}>
           <div className="mx-auto max-w-4xl px-4 py-4">
-            <ProjectPanel onOpenTerminal={openTerminal} />
+            <ProjectPanel onOpenTerminal={openTerminal} onRunOpened={openRunOutput} />
           </div>
         </div>
 
-        <div className={`h-full overflow-y-auto ${activeTabId === 'metrics' ? '' : 'hidden'}`}>
+        <div className={`absolute inset-0 overflow-y-auto ${activeTabId === 'metrics' ? '' : 'opacity-0 pointer-events-none'}`}>
           <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Loading…</div>}>
             <MetricsPage />
           </Suspense>
         </div>
 
-        <div className={`h-full overflow-hidden ${activeTabId === 'voice' ? '' : 'hidden'}`}>
+        <div className={`absolute inset-0 overflow-hidden ${activeTabId === 'voice' ? '' : 'opacity-0 pointer-events-none'}`}>
           <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Loading…</div>}>
             <ConversationPanel />
           </Suspense>
         </div>
 
         {/* Terminal tabs */}
-        {tabs.filter((t): t is TerminalTab => typeof t !== 'string').map((tab) => (
+        {tabs.filter((t): t is TerminalTab => typeof t !== 'string' && t.kind === 'terminal').map((tab) => (
           <div
             key={tab.id}
-            className={`h-full p-2 ${activeTabId === tab.id ? '' : 'hidden'}`}
+            className={`absolute inset-0 p-2 ${activeTabId === tab.id ? 'z-10' : 'opacity-0 pointer-events-none'}`}
           >
-            <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Opening terminal…</div>}>
+            <Suspense fallback={<div className={`absolute inset-0 p-2 ${activeTabId === tab.id ? 'z-10' : 'invisible pointer-events-none'}`}>Opening terminal…</div>}>
               <TerminalPane
                 sessionId={tab.sessionId}
+                isActive={activeTabId === tab.id}
+                onExit={() => closeTab(tab)}
+              />
+            </Suspense>
+          </div>
+        ))}
+
+        {/* Run output tabs */}
+        {tabs.filter((t): t is RunTab => typeof t !== 'string' && t.kind === 'run').map((tab) => (
+          <div
+            key={tab.id}
+            className={`absolute inset-0 p-2 ${activeTabId === tab.id ? 'z-10' : 'invisible pointer-events-none'}`}
+          >
+            <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Connecting…</div>}>
+              <RunOutputPane
+                projectName={tab.projectName}
                 onExit={() => closeTab(tab)}
               />
             </Suspense>

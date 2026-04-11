@@ -18,7 +18,22 @@
       "Bash(.venv/Scripts/python.exe -c \"import piper; print\\('piper ok'\\)\")",
       "Bash(echo \"exit: $?\")",
       "Bash(.venv/Scripts/python.exe:*)",
-      "Bash(.venv/Scripts/pip show:*)"
+      "Bash(.venv/Scripts/pip show:*)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(ls C:/Git/pnd/dann-of-thursday/*.py)",
+      "Bash(dann.bat)",
+      "Bash(where dann:*)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('scripts:', list\\(d.get\\('scripts',{}\\).keys\\(\\)\\)\\)\" echo \"=== pnd-dev-journal ===\")",
+      "Read(//c/Git/pnd/pnd-dev-journal/client-app/**)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('scripts:', list\\(d.get\\('scripts',{}\\).keys\\(\\)\\)\\)\" echo \"=== pnd-front-end-practice client-app ===\")",
+      "Read(//c/Git/pnd/pnd-front-end-practice/client-app/**)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('scripts:', list\\(d.get\\('scripts',{}\\).keys\\(\\)\\)\\)\" echo \"=== pnd-resume app.py ===\")",
+      "Read(//c/Git/pnd/pnd-resume/**)",
+      "Bash(python:*)",
+      "Bash(taskkill:*)",
+      "Bash(.venv/Scripts/uvicorn.exe app.main:app --host 0.0.0.0 --port 8000)",
+      "Bash(kill %1)",
+      "Bash(NO_VOICE=1 .venv/Scripts/uvicorn.exe app.main:app --host 0.0.0.0 --port 8000)"
     ]
   }
 }

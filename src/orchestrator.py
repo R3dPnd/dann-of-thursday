@@ -484,7 +484,7 @@ class Orchestrator:
         if wake_engine == "openwakeword":
             from src.wakeword.openwakeword_detector import OpenWakeWordDetector
             wake_model = self._wake_cfg.get("model", "hey_jarvis")
-            wake_phrase = str(wake_model)
+            wake_phrase = Path(wake_model).stem if str(wake_model).endswith(".onnx") else str(wake_model)
             self._detector = OpenWakeWordDetector(
                 model_name=wake_model,
                 on_wake=self._on_wake,

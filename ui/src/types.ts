@@ -14,6 +14,14 @@ export interface VoiceTurn {
 export interface Project {
   name: string
   path: string
+  run?: string
+}
+
+export interface RunStatus {
+  project_name: string
+  command: string
+  alive: boolean
+  exit_code: number | null
 }
 
 export interface CodeTurn {
