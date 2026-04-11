@@ -39,6 +39,7 @@ export interface StateSnapshot {
   project: string | null
   session_id: string | null
   running: boolean
+  listening?: boolean
   uptime_s: number
 }
 

@@ -1,0 +1,67 @@
+{
+  "audio": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "input_device": null,
+    "output_device": null,
+    "silence_timeout_ms": 1500,
+    "max_record_ms": 15000,
+    "silence_threshold": 0.01
+  },
+  "wake_word": {
+    "engine": "openwakeword",
+    "model": "models/ok_dann.onnx",
+    "threshold": 0.7,
+    "debounce": 4,
+    "cooldown_ms": 2000
+  },
+  "stt": {
+    "engine": "faster_whisper",
+    "model_size": "base",
+    "language": "en",
+    "device": "cpu",
+    "compute_type": "int8"
+  },
+  "ollama": {
+    "base_url": "http://localhost:11434",
+    "model": "llama3.2",
+    "system_prompt": "You are a voice assistant. Rules:\n- Respond in 1-2 short spoken sentences only. Never use lists, markdown, or long explanations.\n- After a tool call succeeds, confirm in one sentence and stop. Do not call the same tool again.\n- Only call a tool when the user explicitly asks for that action. Conversational replies never need a tool call.\n- open_claude_code: use when user says \"open Claude Code in <project>\" or \"start a coding session\".\n- ask_claude_code: use when user wants an answer spoken back, e.g. \"summarise the project\".\n- list_projects: use only when user asks what projects exist.\n",
+    "temperature": 0.7,
+    "max_tokens": 80
+  },
+  "tts": {
+    "engine": "piper",
+    "voice_model": "models/pieper/en_GB-northern_english_male-medium",
+    "speed": 1.0
+  },
+  "projects": [
+    { "name": "dann-of-thursday",       "path": "C:/Git/pnd/dann-of-thursday",       "run": ".venv/Scripts/python.exe dann.py dev" },
+    { "name": "pnd-browser-extensions", "path": "C:/Git/pnd/pnd-browser-extensions" },
+    { "name": "pnd-dev-journal",        "path": "C:/Git/pnd/pnd-dev-journal",        "run": "npm start --prefix client-app" },
+    { "name": "pnd-games",              "path": "C:/Git/pnd/pnd-games" },
+    { "name": "pnd-mcp",                "path": "C:/Git/pnd/pnd-mcp",                "run": "python ok-dann/server.py" },
+    { "name": "pnd-resume",             "path": "C:/Git/pnd/pnd-resume",             "run": "npm start --prefix client" },
+    { "name": "pnd-scripts",            "path": "C:/Git/pnd/pnd-scripts" }
+  ],
+  "notes": [
+    { "name": "pnd-cyber-research", "path": "C:/Git/pnd/pnd-cyber-research" },
+    { "name": "pnd-flipper",        "path": "C:/Git/pnd/pnd-flipper" },
+    { "name": "pnd-journal",        "path": "C:/Git/pnd/pnd-journal" },
+    { "name": "pnd-leet-code",      "path": "C:/Git/pnd/pnd-leet-code" },
+    { "name": "pnd-pixel-art",      "path": "C:/Git/pnd/pnd-pixel-art" },
+    { "name": "pnd-practice",       "path": "C:/Git/pnd/pnd-practice" }
+  ],
+  "mcp": {
+    "servers": [
+      {
+        "name": "claude-code",
+        "command": "python",
+        "args": ["-m", "src.mcp_servers.claude_code_server"]
+      }
+    ]
+  },
+  "ux": {
+    "play_listening_sound": true,
+    "play_thinking_sound": false
+  }
+}

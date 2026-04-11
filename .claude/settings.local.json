@@ -33,7 +33,16 @@
       "Bash(taskkill:*)",
       "Bash(.venv/Scripts/uvicorn.exe app.main:app --host 0.0.0.0 --port 8000)",
       "Bash(kill %1)",
-      "Bash(NO_VOICE=1 .venv/Scripts/uvicorn.exe app.main:app --host 0.0.0.0 --port 8000)"
+      "Bash(NO_VOICE=1 .venv/Scripts/uvicorn.exe app.main:app --host 0.0.0.0 --port 8000)",
+      "WebSearch",
+      "WebFetch(domain:icons.getbootstrap.com)",
+      "WebFetch(domain:commons.wikimedia.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:upload.wikimedia.org)",
+      "WebFetch(domain:cdn.simpleicons.org)",
+      "WebFetch(domain:simpleicons.org)",
+      "WebFetch(domain:en.wikipedia.org)",
+      "WebFetch(domain:brandfetch.com)"
     ]
   }
 }

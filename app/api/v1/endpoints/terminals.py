@@ -25,8 +25,28 @@ router = APIRouter()
 
 class CreateTerminalRequest(BaseModel):
     project_name: str
+    command: str | None = None
     rows: int = 24
     cols: int = 80
+
+
+class CreateRootTerminalRequest(BaseModel):
+    rows: int = 24
+    cols: int = 80
+
+
+@router.post("/dann", summary="Create the persistent DANN terminal at the project root")
+async def create_dann_terminal(body: CreateRootTerminalRequest) -> JSONResponse:
+    """Open a shell at the dann-of-thursday repo root."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[4]  # app/api/v1/endpoints → project root
+    session = terminal_service.create_session(
+        project_name="dann",
+        project_path=str(root),
+        rows=body.rows,
+        cols=body.cols,
+    )
+    return JSONResponse(session.to_dict(), status_code=201)
 
 
 @router.post("", summary="Create a PTY terminal session")
@@ -43,6 +63,7 @@ async def create_terminal(body: CreateTerminalRequest) -> JSONResponse:
         project_path=match["path"],
         rows=body.rows,
         cols=body.cols,
+        command=body.command,
     )
     return JSONResponse(session.to_dict(), status_code=201)
 

@@ -1,16 +1,17 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useDannEvents } from './hooks/useDannEvents'
 import { StatusBar } from './components/StatusBar'
 import { ProjectPanel } from './components/ProjectPanel'
-import MetricsBar from './components/MetricsBar'
 import LogPanel from './components/LogPanel'
 import { api } from './lib/api'
+import type { TerminalPaneHandle } from './components/TerminalPane'
 
 // Lazy-load heavy components
 const MetricsPage = lazy(() => import('./components/MetricsPage'))
 const TerminalPane = lazy(() => import('./components/TerminalPane'))
 const ConversationPanel = lazy(() => import('./components/ConversationPanel'))
 const RunOutputPane = lazy(() => import('./components/RunOutputPane'))
+const NotesPanel = lazy(() => import('./components/NotesPanel').then(m => ({ default: m.NotesPanel })))
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ interface RunTab {
   projectName: string
 }
 
-type StaticTab = 'projects' | 'metrics' | 'voice'
+type StaticTab = 'dann' | 'projects' | 'notes' | 'metrics' | 'voice'
 type Tab = StaticTab | TerminalTab | RunTab
 
 function tabId(t: Tab): string {
@@ -36,7 +37,9 @@ function tabId(t: Tab): string {
 }
 
 function tabLabel(t: Tab): string {
+  if (t === 'dann') return 'DANN'
   if (t === 'projects') return 'Projects'
+  if (t === 'notes') return 'Notes'
   if (t === 'metrics') return 'Metrics'
   if (t === 'voice') return 'Voice'
   if (t.kind === 'run') return `▶ ${t.projectName}`
@@ -48,10 +51,23 @@ function tabLabel(t: Tab): string {
 export default function App() {
   useDannEvents()
 
-  const [tabs, setTabs] = useState<Tab[]>(['projects', 'voice', 'metrics'])
-  const [activeTabId, setActiveTabId] = useState<string>('projects')
+  const [tabs, setTabs] = useState<Tab[]>(['dann', 'projects', 'notes', 'voice', 'metrics'])
+  const [activeTabId, setActiveTabId] = useState<string>('dann')
+  const terminalRefs = useRef<Map<string, React.RefObject<TerminalPaneHandle>>>(new Map())
 
-  const openTerminal = async (projectName: string) => {
+  // ── DANN persistent terminal ───────────────────────────────────────────────
+  const [dannSessionId, setDannSessionId] = useState<string | null>(null)
+  const dannTermRef = useRef<TerminalPaneHandle>(null)
+
+  useEffect(() => {
+    if (activeTabId === 'dann' && !dannSessionId) {
+      api.createDannTerminal().then((s) => setDannSessionId(s.session_id)).catch((err) => {
+        console.error('Failed to start DANN terminal', err)
+      })
+    }
+  }, [activeTabId, dannSessionId])
+
+  const openTerminal = async (projectName: string, command?: string) => {
     // If a terminal tab for this project already exists, just switch to it
     const existing = tabs.find(
       (t): t is TerminalTab => typeof t !== 'string' && t.projectName === projectName
@@ -63,13 +79,14 @@ export default function App() {
 
     try {
       // Ask the backend to create a PTY session
-      const session = await api.createTerminal(projectName)
+      const session = await api.createTerminal(projectName, 40, 120, command)
       const newTab: TerminalTab = {
         kind: 'terminal',
         id: `term-${session.session_id}`,
         sessionId: session.session_id,
         projectName,
       }
+      terminalRefs.current.set(newTab.id, { current: null } as React.RefObject<TerminalPaneHandle>)
       setTabs((prev) => [...prev, newTab])
       setActiveTabId(newTab.id)
     } catch (err) {
@@ -80,6 +97,7 @@ export default function App() {
   const closeTab = (tab: TerminalTab | RunTab) => {
     if (tab.kind === 'terminal') {
       api.closeTerminal(tab.sessionId).catch(() => {})
+      terminalRefs.current.delete(tab.id)
     }
     setTabs((prev) => prev.filter((t) => tabId(t) !== tab.id))
     if (activeTabId === tab.id) setActiveTabId('projects')
@@ -101,7 +119,6 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-zinc-950 overflow-hidden">
       <StatusBar />
-      <MetricsBar />
 
       {/* Tab bar */}
       <nav className="flex items-end border-b border-gray-800 bg-gray-900 px-2 overflow-x-auto shrink-0">
@@ -111,18 +128,22 @@ export default function App() {
 
           const isCloseable = typeof tab !== 'string'
           const isRunTab = typeof tab !== 'string' && tab.kind === 'run'
+          const isDannTab = tab === 'dann'
 
           return (
             <div
               key={id}
               className={`group flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px cursor-pointer whitespace-nowrap transition-colors ${
                 isActive
-                  ? 'border-blue-500 text-white'
-                  : 'border-transparent text-gray-400 hover:text-gray-200'
+                  ? isDannTab ? 'border-teal-400 text-teal-300' : 'border-blue-500 text-white'
+                  : isDannTab ? 'border-transparent text-teal-600 hover:text-teal-400' : 'border-transparent text-gray-400 hover:text-gray-200'
               }`}
               onClick={() => setActiveTabId(id)}
             >
-              {!isRunTab && typeof tab !== 'string' && (
+              {isDannTab && (
+                <span className="text-[10px] font-mono text-teal-500">{'>'}_</span>
+              )}
+              {!isDannTab && !isRunTab && typeof tab !== 'string' && (
                 <span className="text-[10px] text-emerald-400 font-mono">{'>'}_</span>
               )}
               {isRunTab && (
@@ -145,9 +166,34 @@ export default function App() {
 
       {/* Tab content — all panels stacked absolutely so display:none never nukes canvas contexts */}
       <main className="flex-1 overflow-hidden relative">
+
+        {/* DANN persistent terminal */}
+        <div className={`absolute inset-0 p-2 ${activeTabId === 'dann' ? 'z-10' : 'opacity-0 pointer-events-none'}`}>
+          {dannSessionId ? (
+            <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Opening terminal…</div>}>
+              <TerminalPane
+                ref={dannTermRef}
+                sessionId={dannSessionId}
+                isActive={activeTabId === 'dann'}
+                onExit={() => setDannSessionId(null)}
+              />
+            </Suspense>
+          ) : (
+            <div className="p-8 text-teal-700 text-sm font-mono animate-pulse">Starting DANN terminal…</div>
+          )}
+        </div>
+
         <div className={`absolute inset-0 overflow-y-auto ${activeTabId === 'projects' ? '' : 'opacity-0 pointer-events-none'}`}>
           <div className="mx-auto max-w-4xl px-4 py-4">
             <ProjectPanel onOpenTerminal={openTerminal} onRunOpened={openRunOutput} />
+          </div>
+        </div>
+
+        <div className={`absolute inset-0 overflow-y-auto ${activeTabId === 'notes' ? '' : 'opacity-0 pointer-events-none'}`}>
+          <div className="mx-auto max-w-4xl px-4 py-4">
+            <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Loading…</div>}>
+              <NotesPanel onOpenTerminal={openTerminal} />
+            </Suspense>
           </div>
         </div>
 
@@ -169,8 +215,9 @@ export default function App() {
             key={tab.id}
             className={`absolute inset-0 p-2 ${activeTabId === tab.id ? 'z-10' : 'opacity-0 pointer-events-none'}`}
           >
-            <Suspense fallback={<div className={`absolute inset-0 p-2 ${activeTabId === tab.id ? 'z-10' : 'invisible pointer-events-none'}`}>Opening terminal…</div>}>
+            <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Opening terminal…</div>}>
               <TerminalPane
+                ref={terminalRefs.current.get(tab.id) ?? null}
                 sessionId={tab.sessionId}
                 isActive={activeTabId === tab.id}
                 onExit={() => closeTab(tab)}

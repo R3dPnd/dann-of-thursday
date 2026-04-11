@@ -17,6 +17,7 @@ export function useDannEvents(): void {
   const applySnapshot = useDannStore((s) => s.applySnapshot)
   const setWsConnected = useDannStore((s) => s.setWsConnected)
   const setProjects = useDannStore((s) => s.setProjects)
+  const setNoteProjects = useDannStore((s) => s.setNoteProjects)
 
   const retryDelay = useRef(RECONNECT_BASE_MS)
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -27,6 +28,7 @@ export function useDannEvents(): void {
   useEffect(() => {
     api.getState().then(applySnapshot).catch(() => {/* API not yet up */})
     api.getProjects().then(setProjects).catch(() => {})
+    api.getNotes().then(setNoteProjects).catch(() => {})
 
     // Refresh project list every 60 s
     const interval = setInterval(() => {
@@ -34,7 +36,7 @@ export function useDannEvents(): void {
     }, 60_000)
 
     return () => clearInterval(interval)
-  }, [applySnapshot, setProjects])
+  }, [applySnapshot, setProjects, setNoteProjects])
 
   // WebSocket connection with reconnect
   useEffect(() => {

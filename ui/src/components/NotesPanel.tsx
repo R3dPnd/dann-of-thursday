@@ -1,154 +1,57 @@
-import { useState } from 'react'
 import type { Project } from '../types'
 import { useDannStore } from '../hooks/useDannState'
-import { TerminalOutput } from './TerminalOutput'
 
-function RunButton({
-  project,
+function NoteCard({
+  note,
   onOpenTerminal,
 }: {
-  project: Project
-  onOpenTerminal: (name: string, command?: string) => void
+  note: Project
+  onOpenTerminal: (name: string) => void
 }) {
   return (
-    <button
-      onClick={() => onOpenTerminal(project.name, project.run)}
-      className="flex-shrink-0 flex items-center justify-center rounded bg-green-900/50 p-1.5 text-green-300 hover:bg-green-800/60"
-      title={`Run: ${project.run}`}
-    >
-      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor">
-        <path d="M8 5v14l11-7z"/>
-      </svg>
-    </button>
-  )
-}
-
-function ProjectCard({
-  project,
-  isActive,
-  onOpenTerminal,
-  onRunOpened,
-}: {
-  project: Project
-  isActive: boolean
-  onOpenTerminal: (name: string, command?: string) => void
-  onRunOpened: (name: string) => void
-}) {
-  const codeHistory = useDannStore((s) => s.codeHistory)
-  const turns = codeHistory[project.name] ?? []
-  const [expanded, setExpanded] = useState(false)
-
-  const lastTurn = turns[turns.length - 1]
-
-  return (
-    <div
-      id={`project-${project.name}`}
-      className={`rounded-lg border transition-colors ${
-        isActive
-          ? 'border-blue-600 bg-blue-950/30'
-          : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'
-      }`}
-    >
-      {/* Card header */}
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 transition-colors">
       <div className="flex items-center gap-3 px-4 py-3">
-        {/* Active indicator */}
-        <span
-          className={`inline-block h-2 w-2 flex-shrink-0 rounded-full ${
-            isActive ? 'bg-blue-400 pulse-dot' : 'bg-zinc-700'
-          }`}
-        />
-
-        {/* Name + path */}
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-zinc-100">{project.name}</p>
-          <p className="truncate text-xs text-zinc-500" title={project.path}>
-            {project.path}
+          <p className="truncate font-medium text-zinc-100">{note.name}</p>
+          <p className="truncate text-xs text-zinc-500" title={note.path}>
+            {note.path}
           </p>
         </div>
 
-        {/* Turn count */}
-        {turns.length > 0 && (
-          <span className="flex-shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
-            {turns.length}
-          </span>
-        )}
-
-        {/* Last active */}
-        {lastTurn && (
-          <span className="hidden flex-shrink-0 text-xs text-zinc-600 sm:block">
-            {lastTurn.timestamp.toLocaleTimeString()}
-          </span>
-        )}
-
-        {/* Run button (only if project has a run config) */}
-        {project.run && (
-          <RunButton project={project} onOpenTerminal={onOpenTerminal} />
-        )}
-
-        {/* Open terminal tab */}
         <button
-          onClick={() => onOpenTerminal(project.name)}
+          onClick={() => onOpenTerminal(note.name)}
           className="flex-shrink-0 rounded bg-zinc-800 px-2 py-1 text-zinc-300 hover:bg-zinc-700"
-          title="Open Claude Code in a browser terminal tab"
+          title="Open in terminal"
         >
           <svg viewBox="0 0 1200 1200" className="h-4 w-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="M233.959793 800.214905L468.644287 668.536987L472.590637 657.100647L468.644287 650.738403L457.208069 650.738403L417.986633 648.322144L283.892639 644.69812L167.597321 639.865845L54.926208 633.825623L26.577238 627.785339L3.3e-05 592.751709L2.73832 575.27533L26.577238 559.248352L60.724873 562.228149L136.187973 567.382629L249.422867 575.194763L331.570496 580.026978L453.261841 592.671082L472.590637 592.671082L475.328857 584.859009L468.724915 580.026978L463.570557 575.194763L346.389313 495.785217L219.543671 411.865906L153.100723 363.543762L117.181267 339.060425L99.060455 316.107361L91.248367 266.01355L123.865784 230.093994L167.677887 233.073853L178.872513 236.053772L223.248367 270.201477L318.040283 343.570496L441.825592 434.738342L459.946411 449.798706L467.194672 444.64447L468.080597 441.020203L459.946411 427.409485L392.617493 305.718323L320.778564 181.932983L288.80542 130.630859L280.348999 99.865845C277.369171 87.221436 275.194641 76.590698 275.194641 63.624268L312.322174 13.20813L332.8591 6.604126L382.389313 13.20813L403.248352 31.328979L434.013519 101.71814L483.865753 212.537048L561.181274 363.221497L583.812134 407.919434L595.892639 449.315491L600.40271 461.959839L608.214783 461.959839L608.214783 454.711609L614.577271 369.825623L626.335632 265.61084L637.771851 131.516846L641.718201 93.745117L660.402832 48.483276L697.530334 24.000122L726.52356 37.852417L750.362549 72L747.060486 94.067139L732.886047 186.201416L705.100708 330.52356L686.979919 427.167847L697.530334 427.167847L709.61084 415.087341L758.496704 350.174561L840.644348 247.490051L876.885925 206.738342L919.167847 161.71814L946.308838 140.29541L997.61084 140.29541L1035.38269 196.429626L1018.469849 254.416199L965.637634 321.422852L921.825562 378.201538L859.006714 462.765259L819.785278 530.41626L823.409424 535.812073L832.75177 534.92627L974.657776 504.724915L1051.328979 490.872559L1142.818848 475.167786L1184.214844 494.496582L1188.724854 514.147644L1172.456421 554.335693L1074.604126 578.496765L959.838989 601.449829L788.939636 641.879272L786.845764 643.409485L789.261841 646.389343L866.255127 653.637634L899.194702 655.409424L979.812134 655.409424L1129.932861 666.604187L1169.154419 692.537109L1192.671265 724.268677L1188.724854 748.429688L1128.322144 779.194641L1046.818848 759.865845L856.590759 714.604126L791.355774 698.335754L782.335693 698.335754L782.335693 703.731567L836.69812 756.885986L936.322205 846.845581L1061.073975 962.81897L1067.436279 991.490112L1051.409424 1014.120911L1034.496704 1011.704712L924.885986 929.234924L882.604126 892.107544L786.845764 811.48999L780.483276 811.48999L780.483276 819.946289L802.550415 852.241699L919.087341 1027.409424L925.127625 1081.127686L916.671204 1098.604126L886.469849 1109.154419L853.288696 1103.114136L785.073914 1007.355835L714.684631 899.516785L657.906067 802.872498L650.979858 806.81897L617.476624 1167.704834L601.771851 1186.147705L565.530212 1200L535.328857 1177.046997L519.302124 1139.919556L535.328857 1066.550537L554.657776 970.792053L570.362488 894.68457L584.536926 800.134277L592.993347 768.724976L592.429626 766.630859L585.503479 767.516968L514.22821 865.369263L405.825531 1011.865906L320.053711 1103.677979L299.516815 1111.812256L263.919525 1093.369263L267.221497 1060.429688L287.114136 1031.114136L405.825531 880.107361L477.422913 786.52356L523.651062 732.483276L523.328918 724.671265L520.590698 724.671265L205.288605 929.395935L149.154434 936.644409L124.993355 914.01355L127.973183 876.885986L139.409409 864.80542L234.201385 799.570435L233.879227 799.8927Z"/>
           </svg>
         </button>
-
-        {/* Expand toggle */}
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="flex-shrink-0 text-zinc-500 hover:text-zinc-300"
-          aria-label={expanded ? 'Collapse' : 'Expand'}
-        >
-          <svg
-            className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
       </div>
-
-      {/* Terminal output (expanded) */}
-      {expanded && <TerminalOutput turns={turns} />}
     </div>
   )
 }
 
-export function ProjectPanel({
+export function NotesPanel({
   onOpenTerminal,
-  onRunOpened,
 }: {
-  onOpenTerminal: (name: string, command?: string) => void
-  onRunOpened: (name: string) => void
+  onOpenTerminal: (name: string) => void
 }) {
-  const projects = useDannStore((s) => s.projects)
-  const activeProject = useDannStore((s) => s.project)
+  const noteProjects = useDannStore((s) => s.noteProjects)
 
-  if (projects.length === 0) {
+  if (noteProjects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
-        <p className="text-sm">No projects found.</p>
-        <p className="mt-1 text-xs">Projects are configured in config.yaml.</p>
+        <p className="text-sm">No notes repositories found.</p>
+        <p className="mt-1 text-xs">Add entries under "notes" in config.json.</p>
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-3">
-      {projects.map((project) => (
-        <ProjectCard
-          key={project.name}
-          project={project}
-          isActive={activeProject === project.name}
-          onOpenTerminal={onOpenTerminal}
-          onRunOpened={onRunOpened}
-        />
+      {noteProjects.map((note) => (
+        <NoteCard key={note.name} note={note} onOpenTerminal={onOpenTerminal} />
       ))}
     </div>
   )

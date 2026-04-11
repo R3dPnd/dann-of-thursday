@@ -10,9 +10,7 @@ WS     /api/v1/runs/{project_name}/ws      — stream stdout/stderr
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
-import yaml
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.websockets import WebSocket, WebSocketDisconnect
@@ -21,14 +19,11 @@ from app.services import run_service
 
 router = APIRouter()
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-
 
 def _load_run_configs() -> dict[str, dict]:
     """Return {project_name: {path, run}} for projects that have a run command."""
-    config_path = REPO_ROOT / "config.yaml"
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f)
+    from src.config import load_config
+    cfg = load_config()
     result = {}
     for p in cfg.get("projects", []):
         if "run" in p:

@@ -88,6 +88,7 @@ class Orchestrator:
         self._detector: WakeWordDetector | None = None
         self._mcp: MCPManager | None = None
         self._running = False
+        self._user_paused = False
         self._wake_event = threading.Event()
         self._history: list[dict[str, Any]] = []
         self._mode = SessionMode.NORMAL
@@ -162,8 +163,23 @@ class Orchestrator:
             "project": self._code_project,
             "session_id": self._session_id,
             "running": self._running,
+            "listening": not self._user_paused,
             "uptime_s": round(time.time() - self._started_at, 1),
         }
+
+    def enable_listening(self) -> None:
+        """Re-enable wake word detection (undo a user-initiated pause)."""
+        self._user_paused = False
+        if self._detector and self._session_id is None:
+            self._detector.resume()
+        bus.emit("voice.listening_changed", {"listening": True})
+
+    def disable_listening(self) -> None:
+        """Pause wake word detection without stopping the orchestrator."""
+        self._user_paused = True
+        if self._detector and self._session_id is None:
+            self._detector.pause()
+        bus.emit("voice.listening_changed", {"listening": False})
 
     # ── Audio ─────────────────────────────────────────────────────────────────
 
@@ -464,7 +480,7 @@ class Orchestrator:
             self._history.clear()
             self._set_mode(SessionMode.NORMAL, None)
             self._session_id = None
-            if self._detector:
+            if self._detector and not self._user_paused:
                 self._detector.resume()
 
     # ── Main loop ─────────────────────────────────────────────────────────────

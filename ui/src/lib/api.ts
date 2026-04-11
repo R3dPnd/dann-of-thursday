@@ -24,6 +24,9 @@ export const api = {
   getProjects: () =>
     get<{ projects: Project[]; count: number }>('/projects').then(r => r.projects),
 
+  getNotes: () =>
+    get<{ notes: Project[]; count: number }>('/notes').then(r => r.notes),
+
   openProject: (name: string) =>
     post<{ result: string }>(`/projects/${encodeURIComponent(name)}/open`),
 
@@ -36,16 +39,24 @@ export const api = {
   getByProject: () =>
     get<{ project: string; total: number; ok: number; error: number; empty: number; avg_response_ms: number | null }[]>('/metrics/by-project'),
 
-  createTerminal: (projectName: string, rows = 40, cols = 120) =>
+  createTerminal: (projectName: string, rows = 40, cols = 120, command?: string) =>
     post<{ session_id: string; project_name: string; project_path: string; alive: boolean }>(
       '/terminals',
-      { project_name: projectName, rows, cols },
+      { project_name: projectName, rows, cols, ...(command ? { command } : {}) },
+    ),
+
+  createDannTerminal: (rows = 40, cols = 120) =>
+    post<{ session_id: string; project_name: string; project_path: string; alive: boolean }>(
+      '/terminals/dann',
+      { rows, cols },
     ),
 
   closeTerminal: (sessionId: string) =>
     fetch(`/api/v1/terminals/${sessionId}`, { method: 'DELETE' }).catch(() => {}),
 
   triggerVoice: () => post<{ triggered: boolean }>('/voice/trigger'),
+  enableVoice: () => post<{ listening: boolean }>('/voice/enable'),
+  disableVoice: () => post<{ listening: boolean }>('/voice/disable'),
 
   getRunStatus: (name: string) => get<RunStatus>(`/runs/${encodeURIComponent(name)}/status`),
   startRun: (name: string) => post<RunStatus>(`/runs/${encodeURIComponent(name)}/start`),

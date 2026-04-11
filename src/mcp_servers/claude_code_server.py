@@ -41,7 +41,10 @@ def _load_configured_projects() -> list[dict] | None:
             path = Path(str(entry.get("path", ""))).expanduser()
             name = entry.get("name") or path.name
             if path.exists():
-                projects.append({"name": str(name), "path": str(path)})
+                project: dict = {"name": str(name), "path": str(path)}
+                if "run" in entry:
+                    project["run"] = str(entry["run"])
+                projects.append(project)
         return sorted(projects, key=lambda p: p["name"].lower()) if projects else None
     except Exception:
         return None

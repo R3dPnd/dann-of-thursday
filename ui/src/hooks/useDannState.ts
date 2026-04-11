@@ -10,6 +10,7 @@ interface DannStore {
   project: string | null
   sessionId: string | null
   running: boolean
+  voiceListening: boolean
 
   // WebSocket connection
   wsConnected: boolean
@@ -21,6 +22,7 @@ interface DannStore {
 
   // Projects
   projects: Project[]
+  noteProjects: Project[]
 
   // Voice conversation history (all modes)
   voiceTurns: VoiceTurn[]
@@ -40,6 +42,7 @@ interface DannStore {
   applyEvent: (type: string, payload: Record<string, unknown>) => void
   setWsConnected: (connected: boolean) => void
   setProjects: (projects: Project[]) => void
+  setNoteProjects: (notes: Project[]) => void
   setMetricSummary: (summary: MetricSummary) => void
   clearUnreadErrors: () => void
 }
@@ -49,10 +52,12 @@ export const useDannStore = create<DannStore>((set) => ({
   project: null,
   sessionId: null,
   running: false,
+  voiceListening: true,
   wsConnected: false,
   pipelineStage: 'idle',
   _pendingStt: null,
   projects: [],
+  noteProjects: [],
   voiceTurns: [],
   codeHistory: {},
   metricSummary: null,
@@ -65,6 +70,7 @@ export const useDannStore = create<DannStore>((set) => ({
       project: snapshot.project,
       sessionId: snapshot.session_id,
       running: snapshot.running,
+      voiceListening: snapshot.listening ?? true,
     }),
 
   applyEvent: (type, payload) => {
@@ -75,6 +81,10 @@ export const useDannStore = create<DannStore>((set) => ({
           project: (payload.project as string | null) ?? null,
           sessionId: (payload.session_id as string | null) ?? null,
         })
+        break
+
+      case 'voice.listening_changed':
+        set({ voiceListening: (payload.listening as boolean) ?? true })
         break
 
       case 'session.start':
@@ -213,6 +223,7 @@ export const useDannStore = create<DannStore>((set) => ({
 
   setWsConnected: (connected) => set({ wsConnected: connected }),
   setProjects: (projects) => set({ projects }),
+  setNoteProjects: (notes) => set({ noteProjects: notes }),
   setMetricSummary: (summary) => set({ metricSummary: summary }),
   clearUnreadErrors: () => set({ unreadErrors: 0 }),
 }))

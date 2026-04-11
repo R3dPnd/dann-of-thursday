@@ -36,18 +36,19 @@ class TerminalSession:
         self.project_path = project_path
         self._proc: "winpty.PtyProcess | ptyprocess.PtyProcess | None" = None
 
-    def start(self, rows: int = 24, cols: int = 80) -> None:
+    def start(self, rows: int = 24, cols: int = 80, command: str = "claude") -> None:
+        import shlex
         env = {**os.environ, "TERM": "xterm-256color", "COLORTERM": "truecolor"}
         if _WINDOWS:
             self._proc = winpty.PtyProcess.spawn(
-                "claude",
+                command,
                 cwd=self.project_path,
                 dimensions=(rows, cols),
                 env=env,
             )
         else:
             self._proc = ptyprocess.PtyProcess.spawn(
-                ["claude"],
+                shlex.split(command),
                 cwd=self.project_path,
                 dimensions=(rows, cols),
                 env=env,
@@ -95,10 +96,10 @@ class TerminalSession:
         }
 
 
-def create_session(project_name: str, project_path: str, rows: int = 50, cols: int = 220) -> TerminalSession:
+def create_session(project_name: str, project_path: str, rows: int = 50, cols: int = 220, command: str | None = None) -> TerminalSession:
     session_id = str(uuid.uuid4())
     session = TerminalSession(session_id, project_name, project_path)
-    session.start(rows=rows, cols=cols)
+    session.start(rows=rows, cols=cols, command=command or "claude")
     with _lock:
         _sessions[session_id] = session
     return session

@@ -1,4 +1,4 @@
-"""POST /api/v1/voice/trigger — trigger a voice session from the UI."""
+"""Voice control endpoints — trigger, enable, and disable listening."""
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -17,3 +17,21 @@ async def trigger_voice() -> JSONResponse:
         )
     orchestrator._on_wake()
     return JSONResponse({"triggered": True})
+
+
+@router.post("/enable", summary="Enable wake word listening")
+async def enable_voice() -> JSONResponse:
+    from app.main import orchestrator
+    if orchestrator is None or not orchestrator._running:
+        raise HTTPException(status_code=503, detail="Orchestrator not running.")
+    orchestrator.enable_listening()
+    return JSONResponse({"listening": True})
+
+
+@router.post("/disable", summary="Disable wake word listening")
+async def disable_voice() -> JSONResponse:
+    from app.main import orchestrator
+    if orchestrator is None or not orchestrator._running:
+        raise HTTPException(status_code=503, detail="Orchestrator not running.")
+    orchestrator.disable_listening()
+    return JSONResponse({"listening": False})
