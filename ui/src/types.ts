@@ -68,6 +68,12 @@ export interface ProjectMetric {
   avg_response_ms: number | null
 }
 
+export interface PromptBuilderResult {
+  recommended_model: string
+  prompt: string
+  reasoning: string
+}
+
 export interface LogEntry {
   timestamp: string
   level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL'

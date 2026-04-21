@@ -15,12 +15,18 @@ import signal
 import subprocess
 import sys
 import threading
+import time
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent
 VENV_PYTHON = REPO / ".venv" / "Scripts" / "python.exe"
 VENV_UVICORN = REPO / ".venv" / "Scripts" / "uvicorn.exe"
 UI_DIR = REPO / "ui"
+
+API_PORT = 8000
+UI_PORT  = 3000
 
 
 def _stream(stream, prefix: str) -> None:
@@ -32,17 +38,36 @@ def _stream(stream, prefix: str) -> None:
         pass  # pipe closed
 
 
+def _wait_for_api(port: int, timeout: float = 30.0, interval: float = 0.15) -> bool:
+    """Poll http://127.0.0.1:<port>/health until it returns 200 or timeout expires.
+
+    Returns True if the API came up, False if it timed out.
+    """
+    url = f"http://127.0.0.1:{port}/health"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(interval)
+    return False
+
+
 def cmd_dev(voice: bool = False) -> None:
     env_api = {**os.environ, "PYTHONUNBUFFERED": "1"}
     if not voice:
         env_api["NO_VOICE"] = "1"
 
+    # ── Start the API first ───────────────────────────────────────────────────
     api_proc = subprocess.Popen(
         [
             str(VENV_UVICORN),
             "app.main:app",
             "--host", "0.0.0.0",
-            "--port", "8000",
+            "--port", str(API_PORT),
         ],
         cwd=str(REPO),
         env=env_api,
@@ -52,6 +77,18 @@ def cmd_dev(voice: bool = False) -> None:
         bufsize=1,
     )
 
+    threading.Thread(target=_stream, args=(api_proc.stdout, "\033[36m[api]\033[0m "), daemon=True).start()
+    threading.Thread(target=_stream, args=(api_proc.stderr, "\033[36m[api]\033[0m "), daemon=True).start()
+
+    # ── Wait until the API is accepting connections ───────────────────────────
+    print(f"\033[36m[dann]\033[0m Waiting for API on :{API_PORT}…", flush=True)
+    ready = _wait_for_api(API_PORT, timeout=30.0)
+    if not ready:
+        print("\033[31m[dann]\033[0m API did not start within 30s — aborting.", flush=True)
+        api_proc.terminate()
+        sys.exit(1)
+
+    # ── Now start the UI ──────────────────────────────────────────────────────
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
     ui_proc = subprocess.Popen(
         [npm_cmd, "run", "dev"],
@@ -63,10 +100,7 @@ def cmd_dev(voice: bool = False) -> None:
     )
 
     procs = [api_proc, ui_proc]
-
-    threading.Thread(target=_stream, args=(api_proc.stdout, "\033[36m[api]\033[0m "), daemon=True).start()
-    threading.Thread(target=_stream, args=(api_proc.stderr, "\033[36m[api]\033[0m "), daemon=True).start()
-    threading.Thread(target=_stream, args=(ui_proc.stdout,  "\033[35m[ui] \033[0m "), daemon=True).start()
+    threading.Thread(target=_stream, args=(ui_proc.stdout, "\033[35m[ui] \033[0m "), daemon=True).start()
 
     def _shutdown(sig=None, frame=None):
         print("\n[dann] Shutting down…", flush=True)
@@ -82,8 +116,8 @@ def cmd_dev(voice: bool = False) -> None:
         signal.signal(signal.SIGTERM, _shutdown)
 
     voice_label = "with voice" if voice else "NO_VOICE=1"
-    print(f"\033[32m[dann]\033[0m API  → http://localhost:8000  ({voice_label})", flush=True)
-    print(f"\033[32m[dann]\033[0m UI   → http://localhost:5173", flush=True)
+    print(f"\033[32m[dann]\033[0m API  → http://localhost:{API_PORT}  ({voice_label})", flush=True)
+    print(f"\033[32m[dann]\033[0m UI   → http://localhost:{UI_PORT}", flush=True)
     print(f"\033[32m[dann]\033[0m Ctrl+C to stop both\n", flush=True)
 
     # Wait — exit when either process dies

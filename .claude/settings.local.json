@@ -42,7 +42,15 @@
       "WebFetch(domain:cdn.simpleicons.org)",
       "WebFetch(domain:simpleicons.org)",
       "WebFetch(domain:en.wikipedia.org)",
-      "WebFetch(domain:brandfetch.com)"
+      "WebFetch(domain:brandfetch.com)",
+      "Bash(npx tsc:*)",
+      "Bash(C:/Git/pnd/dann-of-thursday/.venv/Scripts/python.exe:*)",
+      "Bash(C:/Git/pnd/dann-of-thursday/.venv/Scripts/pip.exe install:*)",
+      "Bash(where claude:*)",
+      "Bash(cat C:/Git/pnd/dann-of-thursday/ui/vite.config.*)",
+      "Bash(xargs cat:*)",
+      "Bash(NO_VOICE=1 .venv/Scripts/python.exe -c \"import app.main\")",
+      "Bash(NO_VOICE=1 .venv/Scripts/python.exe -c \"import app.main; print\\('app.main OK'\\)\")"
     ]
   }
 }

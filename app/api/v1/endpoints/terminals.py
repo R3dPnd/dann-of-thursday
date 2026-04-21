@@ -122,6 +122,8 @@ async def terminal_ws(websocket: WebSocket, session_id: str) -> None:
     try:
         while True:
             msg = await websocket.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
             if "bytes" in msg and msg["bytes"]:
                 session.write(msg["bytes"])
             elif "text" in msg and msg["text"]:

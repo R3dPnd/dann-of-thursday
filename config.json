@@ -35,21 +35,22 @@
     "speed": 1.0
   },
   "projects": [
-    { "name": "dann-of-thursday",       "path": "C:/Git/pnd/dann-of-thursday",       "run": ".venv/Scripts/python.exe dann.py dev" },
-    { "name": "pnd-browser-extensions", "path": "C:/Git/pnd/pnd-browser-extensions" },
-    { "name": "pnd-dev-journal",        "path": "C:/Git/pnd/pnd-dev-journal",        "run": "npm start --prefix client-app" },
-    { "name": "pnd-games",              "path": "C:/Git/pnd/pnd-games" },
-    { "name": "pnd-mcp",                "path": "C:/Git/pnd/pnd-mcp",                "run": "python ok-dann/server.py" },
-    { "name": "pnd-resume",             "path": "C:/Git/pnd/pnd-resume",             "run": "npm start --prefix client" },
-    { "name": "pnd-scripts",            "path": "C:/Git/pnd/pnd-scripts" }
+    { "name": "dann-of-thursday", "path": "C:/Git/pnd/dann-of-thursday", "run": ".venv/Scripts/python.exe dann.py dev" },
+    { "name": "pnd-dev-journal",  "path": "C:/Git/pnd/pnd-dev-journal",  "run": "npm start --prefix client-app" },
+    { "name": "pnd-mcp",          "path": "C:/Git/pnd/pnd-mcp",          "run": "python ok-dann/server.py" },
+    { "name": "pnd-resume",       "path": "C:/Git/pnd/pnd-resume",       "run": "npm start --prefix client" },
+    { "name": "pnd-job-search",   "path": "C:/Git/pnd/pnd-job-search" }
   ],
   "notes": [
-    { "name": "pnd-cyber-research", "path": "C:/Git/pnd/pnd-cyber-research" },
-    { "name": "pnd-flipper",        "path": "C:/Git/pnd/pnd-flipper" },
-    { "name": "pnd-journal",        "path": "C:/Git/pnd/pnd-journal" },
-    { "name": "pnd-leet-code",      "path": "C:/Git/pnd/pnd-leet-code" },
-    { "name": "pnd-pixel-art",      "path": "C:/Git/pnd/pnd-pixel-art" },
-    { "name": "pnd-practice",       "path": "C:/Git/pnd/pnd-practice" }
+    { "name": "pnd-browser-extensions", "path": "C:/Git/pnd/pnd-browser-extensions" },
+    { "name": "pnd-cyber-research",     "path": "C:/Git/pnd/pnd-cyber-research" },
+    { "name": "pnd-flipper",            "path": "C:/Git/pnd/pnd-flipper" },
+    { "name": "pnd-games",              "path": "C:/Git/pnd/pnd-games" },
+    { "name": "pnd-journal",            "path": "C:/Git/pnd/pnd-journal" },
+    { "name": "pnd-leet-code",          "path": "C:/Git/pnd/pnd-leet-code" },
+    { "name": "pnd-pixel-art",          "path": "C:/Git/pnd/pnd-pixel-art" },
+    { "name": "pnd-practice",           "path": "C:/Git/pnd/pnd-practice" },
+    { "name": "pnd-scripts",            "path": "C:/Git/pnd/pnd-scripts" }
   ],
   "mcp": {
     "servers": [

@@ -549,6 +549,64 @@ The `open_claude_code` MCP tool opens a new Terminal window with `claude` runnin
 | 8.10 | Health | /ready always returned "ready" | Medium | Low — **Fixed** |
 | 8.11 | Security | API key check always passed | High | Low — **Fixed** |
 
+---
+
+## Priority 9: Resume / ATS Compatibility
+
+Issues identified in the current resume that will reduce ATS match scores or cause parsing failures.
+
+### 9.1 Company Names and Dates Concatenated Without Spaces
+ATS parsers will read 'AxonSeptember 2025' and 'MicrosoftMay 2022' as a single token, mangling job titles, employers, and tenure calculations.
+
+**Fix:** Ensure a tab or consistent spacing separates company name from date range in the DOCX template.
+
+### 9.2 Education Section Omits Graduation Year
+ATS systems that require date fields may flag or reject an entry with no graduation year.
+
+**Fix:** Add the graduation year to the education entry.
+
+### 9.3 Inconsistent Title — Summary vs. Job Titles
+Summary header reads 'SOFTWARE DEVELOPER' but all job titles are 'Software Engineer II/I'. Inconsistent title signals may reduce match score on 'Software Engineer' searches.
+
+**Fix:** Align the summary title with actual job titles ('Software Engineer').
+
+### 9.4 'DotNet' Should Be '.NET'
+ATS keyword matching is literal. '.NET' is the canonical form in job postings; 'DotNet' will not match.
+
+**Fix:** Replace all instances of 'DotNet' with '.NET'.
+
+### 9.5 'PCF' Is Unexpanded
+'Pivotal Cloud Foundry' is not universally recognized as 'PCF'. ATS parsers may miss the keyword.
+
+**Fix:** Write 'Pivotal Cloud Foundry (PCF)' on first use so both forms are searchable.
+
+### 9.6 Infosys (Boeing) Parenthetical May Confuse Employer Parsing
+ATS employer-name extraction may read '(Boeing)' as a separate entity or mangle the company name.
+
+**Fix:** Use a standard contractor format, e.g., 'Infosys — client: Boeing' or a dedicated 'Client' line, rather than a parenthetical.
+
+### 9.7 Agile/Scrum Missing from Skills Section
+Agile and Scrum are mentioned in role bullets but not listed in the Skills block. ATS scanners often search Skills sections specifically.
+
+**Fix:** Add 'Agile / Scrum' explicitly to the Technical Skills section.
+
+### 9.8 No Certifications Section
+Significant AWS and Azure experience is present but no certifications are listed. Cloud certs are high-weight ATS keywords in most engineering JDs.
+
+**Fix:** Add a Certifications section; list any current certs or note in-progress ones.
+
+### 9.9 LinkedIn URL Missing HTTPS Prefix
+'linkedin.com/in/...' format may fail ATS link extraction. Full URL with protocol is safer.
+
+**Fix:** Use 'https://www.linkedin.com/in/...' in the contact header.
+
+### 9.10 Technical Skills Section Mixes Abstraction Levels Inconsistently
+JSON and Unix appear alongside frameworks and cloud platforms, which can confuse skill-extraction parsers that bucket by category.
+
+**Fix:** Reorganize into named subcategories (e.g., Languages, Frameworks, Cloud & DevOps, Tools) so parsers can assign each keyword to the correct domain.
+
+---
+
 ## Recommended Execution Order
 
 1. **Immediate (< 1 day):** Items 1.1, 1.2, 2.3, 2.5, 2.6 — low-effort, high-impact security and quality fixes

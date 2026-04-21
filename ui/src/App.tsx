@@ -3,6 +3,7 @@ import { useDannEvents } from './hooks/useDannEvents'
 import { StatusBar } from './components/StatusBar'
 import { ProjectPanel } from './components/ProjectPanel'
 import LogPanel from './components/LogPanel'
+import { LeftNav } from './components/LeftNav'
 import { api } from './lib/api'
 import type { TerminalPaneHandle } from './components/TerminalPane'
 
@@ -164,6 +165,10 @@ export default function App() {
         })}
       </nav>
 
+      {/* Body: left nav + tab content */}
+      <div className="flex flex-1 overflow-hidden">
+      <LeftNav />
+
       {/* Tab content — all panels stacked absolutely so display:none never nukes canvas contexts */}
       <main className="flex-1 overflow-hidden relative">
 
@@ -241,6 +246,7 @@ export default function App() {
           </div>
         ))}
       </main>
+      </div>
 
       <LogPanel />
     </div>
