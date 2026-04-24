@@ -50,7 +50,9 @@
       "Bash(cat C:/Git/pnd/dann-of-thursday/ui/vite.config.*)",
       "Bash(xargs cat:*)",
       "Bash(NO_VOICE=1 .venv/Scripts/python.exe -c \"import app.main\")",
-      "Bash(NO_VOICE=1 .venv/Scripts/python.exe -c \"import app.main; print\\('app.main OK'\\)\")"
+      "Bash(NO_VOICE=1 .venv/Scripts/python.exe -c \"import app.main; print\\('app.main OK'\\)\")",
+      "Bash(xargs ls *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('scripts', {}\\)\\)\")"
     ]
   }
 }

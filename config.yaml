@@ -61,6 +61,9 @@ projects:
   - name: pnd-dev-journal
     path: C:/Git/pnd/pnd-dev-journal
     run: npm start --prefix client-app
+  - name: pnd-job-search
+    path: C:/Git/pnd/pnd-job-search
+    run: python pnd.py dev
   - name: pnd-journal
     path: C:/Git/pnd/pnd-journal
   - name: pnd-flipper
