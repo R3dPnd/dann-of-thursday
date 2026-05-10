@@ -52,7 +52,13 @@
       "Bash(NO_VOICE=1 .venv/Scripts/python.exe -c \"import app.main\")",
       "Bash(NO_VOICE=1 .venv/Scripts/python.exe -c \"import app.main; print\\('app.main OK'\\)\")",
       "Bash(xargs ls *)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('scripts', {}\\)\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('scripts', {}\\)\\)\")",
+      "WebFetch(domain:www.getmaxim.ai)",
+      "WebFetch(domain:dev.to)",
+      "WebFetch(domain:neo4j.com)",
+      "WebFetch(domain:www.systemdesignhandbook.com)",
+      "WebFetch(domain:blog.promptlayer.com)",
+      "WebFetch(domain:www.firecrawl.dev)"
     ]
   }
 }
