@@ -58,7 +58,14 @@
       "WebFetch(domain:neo4j.com)",
       "WebFetch(domain:www.systemdesignhandbook.com)",
       "WebFetch(domain:blog.promptlayer.com)",
-      "WebFetch(domain:www.firecrawl.dev)"
+      "WebFetch(domain:www.firecrawl.dev)",
+      "Bash(Get-ChildItem -Path . -Exclude .venv,node_modules -Depth 2)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Git\\\\pnd\\\\dann-of-thursday\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Select-Object -First 50)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Git\\\\pnd\\\\pnd-dev-journal\\\\client-app\" -Recurse -Directory)",
+      "PowerShell(head *)"
     ]
   }
 }

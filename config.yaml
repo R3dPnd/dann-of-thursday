@@ -84,6 +84,8 @@ projects:
     run: npm start --prefix client
   - name: pnd-scripts
     path: C:/Git/pnd/pnd-scripts
+  - name: diablo-of-monday
+    path: C:/Git/pnd/diablo-of-monday
 
 mcp:
   servers:

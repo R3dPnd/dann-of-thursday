@@ -52,20 +52,19 @@ async def create_dann_terminal(body: CreateRootTerminalRequest) -> JSONResponse:
 @router.post("", summary="Create a PTY terminal session")
 async def create_terminal(body: CreateTerminalRequest) -> JSONResponse:
     from pathlib import Path as _Path
-    from src.mcp_servers.claude_code_server import _find_projects
     from src.config import load_config
 
-    projects = _find_projects()
-    match = next((p for p in projects if p["name"] == body.project_name), None)
-
-    if match is None:
-        cfg = load_config()
-        for entry in cfg.get("notes", []):
+    cfg = load_config()
+    match = None
+    for section in ("projects", "notes"):
+        for entry in cfg.get(section, []):
             path = _Path(str(entry.get("path", ""))).expanduser()
             name = str(entry.get("name") or path.name)
             if name == body.project_name and path.exists():
                 match = {"name": name, "path": str(path)}
                 break
+        if match is not None:
+            break
 
     if match is None:
         raise HTTPException(status_code=404, detail=f"Project '{body.project_name}' not found")
@@ -111,14 +110,17 @@ async def terminal_ws(websocket: WebSocket, session_id: str) -> None:
         await websocket.close(code=4004)
         return
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     async def _read_pty() -> None:
         """Forward PTY output → WebSocket (runs in thread executor to avoid blocking)."""
         while True:
             try:
                 data: bytes = await loop.run_in_executor(None, session.read, 4096)
-                await websocket.send_bytes(data)
+                if data:
+                    await websocket.send_bytes(data)
+            except asyncio.CancelledError:
+                raise
             except EOFError:
                 # Process exited
                 try:
@@ -126,7 +128,7 @@ async def terminal_ws(websocket: WebSocket, session_id: str) -> None:
                 except Exception:
                     pass
                 break
-            except Exception:
+            except BaseException:
                 break
 
     read_task = asyncio.create_task(_read_pty())
