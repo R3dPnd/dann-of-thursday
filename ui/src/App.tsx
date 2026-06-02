@@ -60,6 +60,30 @@ export default function App() {
   const [dannSessionId, setDannSessionId] = useState<string | null>(null)
   const dannTermRef = useRef<TerminalPaneHandle>(null)
 
+  // On mount: reconnect to any sessions the backend still has alive (survives page refresh)
+  useEffect(() => {
+    api.listTerminals().then((sessions) => {
+      for (const s of sessions) {
+        if (!s.alive) continue
+        if (s.project_name === 'dann') {
+          setDannSessionId(s.session_id)
+        } else {
+          const tab: TerminalTab = {
+            kind: 'terminal',
+            id: `term-${s.session_id}`,
+            sessionId: s.session_id,
+            projectName: s.project_name,
+          }
+          terminalRefs.current.set(tab.id, { current: null } as React.RefObject<TerminalPaneHandle>)
+          setTabs((prev) => {
+            if (prev.some((t): t is TerminalTab => typeof t !== 'string' && t.kind === 'terminal' && (t as TerminalTab).sessionId === s.session_id)) return prev
+            return [...prev, tab]
+          })
+        }
+      }
+    }).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (activeTabId === 'dann' && !dannSessionId) {
       api.createDannTerminal().then((s) => setDannSessionId(s.session_id)).catch((err) => {

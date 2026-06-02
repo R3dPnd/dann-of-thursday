@@ -39,6 +39,9 @@ export const api = {
   getByProject: () =>
     get<{ project: string; total: number; ok: number; error: number; empty: number; avg_response_ms: number | null }[]>('/metrics/by-project'),
 
+  listTerminals: () =>
+    get<{ session_id: string; project_name: string; project_path: string; alive: boolean }[]>('/terminals'),
+
   createTerminal: (projectName: string, rows = 40, cols = 120, command?: string) =>
     post<{ session_id: string; project_name: string; project_path: string; alive: boolean }>(
       '/terminals',
