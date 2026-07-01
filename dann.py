@@ -3,9 +3,11 @@
 dann CLI — developer tooling for Dann of Thursday.
 
 Usage:
-    dann dev          Start API + UI dev servers (NO_VOICE=1 by default)
-    dann dev --voice  Start API + UI dev servers with voice pipeline enabled
-    dann start        Start API only, with voice pipeline enabled
+    dann dev              Start API + UI dev servers (NO_VOICE=1 by default)
+    dann dev --voice      Start API + UI dev servers with voice pipeline enabled
+    dann electron         Start API + Electron dev window (NO_VOICE=1 by default)
+    dann electron --voice Start API + Electron dev window with voice pipeline enabled
+    dann start            Start API only, with voice pipeline enabled
 """
 
 from __future__ import annotations
@@ -43,7 +45,7 @@ def _wait_for_api(port: int, timeout: float = 30.0, interval: float = 0.15) -> b
 
     Returns True if the API came up, False if it timed out.
     """
-    url = f"http://127.0.0.1:{port}/health"
+    url = f"http://127.0.0.1:{port}/api/v1/health"
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -125,6 +127,75 @@ def cmd_dev(voice: bool = False) -> None:
     ui_proc.terminate()
 
 
+def cmd_electron(voice: bool = False) -> None:
+    """Start API + Electron dev window (Vite hot reload inside Electron)."""
+    env_api = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    if not voice:
+        env_api["NO_VOICE"] = "1"
+
+    # ── Start the API first ───────────────────────────────────────────────────
+    api_proc = subprocess.Popen(
+        [
+            str(VENV_UVICORN),
+            "app.main:app",
+            "--host", "0.0.0.0",
+            "--port", str(API_PORT),
+        ],
+        cwd=str(REPO),
+        env=env_api,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+
+    threading.Thread(target=_stream, args=(api_proc.stdout, "\033[36m[api]\033[0m "), daemon=True).start()
+    threading.Thread(target=_stream, args=(api_proc.stderr, "\033[36m[api]\033[0m "), daemon=True).start()
+
+    # ── Wait until the API is accepting connections ───────────────────────────
+    print(f"\033[36m[dann]\033[0m Waiting for API on :{API_PORT}…", flush=True)
+    ready = _wait_for_api(API_PORT, timeout=30.0)
+    if not ready:
+        print("\033[31m[dann]\033[0m API did not start within 30s — aborting.", flush=True)
+        api_proc.terminate()
+        sys.exit(1)
+
+    # ── Now start Electron (concurrently runs Vite + Electron internally) ─────
+    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
+    electron_proc = subprocess.Popen(
+        [npm_cmd, "run", "electron:dev"],
+        cwd=str(UI_DIR),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    procs = [api_proc, electron_proc]
+    threading.Thread(target=_stream, args=(electron_proc.stdout, "\033[35m[ui] \033[0m "), daemon=True).start()
+
+    def _shutdown(sig=None, frame=None):
+        print("\n[dann] Shutting down…", flush=True)
+        for p in procs:
+            try:
+                p.terminate()
+            except Exception:
+                pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _shutdown)
+
+    voice_label = "with voice" if voice else "NO_VOICE=1"
+    print(f"\033[32m[dann]\033[0m API      → http://localhost:{API_PORT}  ({voice_label})", flush=True)
+    print(f"\033[32m[dann]\033[0m Electron → opening window…", flush=True)
+    print(f"\033[32m[dann]\033[0m Ctrl+C to stop all\n", flush=True)
+
+    api_proc.wait()
+    electron_proc.terminate()
+
+
 def cmd_start() -> None:
     """Start API with voice pipeline."""
     api_proc = subprocess.Popen(
@@ -159,6 +230,9 @@ def main() -> None:
     if command == "dev":
         voice = "--voice" in args
         cmd_dev(voice=voice)
+    elif command == "electron":
+        voice = "--voice" in args
+        cmd_electron(voice=voice)
     elif command == "start":
         cmd_start()
     else:

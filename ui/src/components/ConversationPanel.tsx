@@ -6,11 +6,11 @@ import type { PipelineStage, VoiceTurn } from '../types'
 // ── Stage config ──────────────────────────────────────────────────────────────
 
 const STAGE_INFO: Record<PipelineStage, { label: string; color: string }> = {
-  idle:      { label: 'Ready',                color: 'text-zinc-500' },
-  wake:      { label: 'Wake word detected',   color: 'text-neon-orange' },
-  recording: { label: 'Listening…',           color: 'text-neon-red' },
-  thinking:  { label: 'Thinking…',            color: 'text-neon-blue' },
-  speaking:  { label: 'Speaking…',            color: 'text-neon-teal' },
+  idle:      { label: "Listening for 'ok Dann'", color: 'text-zinc-500' },
+  wake:      { label: 'Wake word detected',       color: 'text-neon-orange' },
+  recording: { label: 'Listening…',               color: 'text-neon-red' },
+  thinking:  { label: 'Thinking…',                color: 'text-neon-blue' },
+  speaking:  { label: 'Speaking…',                color: 'text-neon-teal' },
 }
 
 // Equalizer bar timings — offset durations give a natural, uneven feel
@@ -85,6 +85,7 @@ export default function ConversationPanel() {
   const voiceTurns    = useDannStore((s) => s.voiceTurns)
   const pipelineStage = useDannStore((s) => s.pipelineStage)
   const pendingStt    = useDannStore((s) => s._pendingStt)
+  const liveResponse  = useDannStore((s) => s.liveResponse)
   const voiceListening = useDannStore((s) => s.voiceListening)
   const running        = useDannStore((s) => s.running)
   const bottomRef     = useRef<HTMLDivElement>(null)
@@ -100,7 +101,7 @@ export default function ConversationPanel() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [voiceTurns.length, pipelineStage])
+  }, [voiceTurns.length, pipelineStage, liveResponse])
 
   async function handleTrigger() {
     setTriggering(true)
@@ -138,6 +139,9 @@ export default function ConversationPanel() {
 
       {/* ── Centered state display ─────────────────────────────────────────── */}
       <div className="flex flex-col items-center justify-center gap-4 py-8 border-b border-zinc-800/60 shrink-0">
+
+        {/* Animated state orb */}
+        <StateOrb stage={voiceListening && running ? pipelineStage : 'idle'} />
 
         {/* Mic toggle */}
         <button
@@ -205,11 +209,31 @@ export default function ConversationPanel() {
 
       {/* ── Conversation history ───────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        {voiceTurns.length === 0 ? (
+        {voiceTurns.length === 0 && !liveResponse ? (
           <p className="text-center text-[11px] text-zinc-700 py-8">No conversation yet</p>
         ) : (
           voiceTurns.map((turn) => <TurnCard key={turn.id} turn={turn} />)
         )}
+
+        {/* Live streaming response — appears sentence-by-sentence as Dann speaks */}
+        {liveResponse && (
+          <div className="flex flex-col gap-2 border-b border-zinc-800/60 px-4 py-3">
+            {pendingStt && (
+              <div className="flex justify-end">
+                <div className="voice-user-bubble max-w-[80%] rounded-lg rounded-tr-sm px-3 py-2 text-xs opacity-70">
+                  {pendingStt}
+                </div>
+              </div>
+            )}
+            <div className="flex justify-start">
+              <div className="voice-dann-bubble max-w-[80%] rounded-lg rounded-tl-sm px-3 py-2 text-xs">
+                {liveResponse}
+                <span className="inline-block ml-0.5 animate-pulse text-teal-400">▋</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 

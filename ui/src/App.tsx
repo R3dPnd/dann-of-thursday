@@ -4,13 +4,14 @@ import { StatusBar } from './components/StatusBar'
 import { ProjectPanel } from './components/ProjectPanel'
 import LogPanel from './components/LogPanel'
 import { LeftNav } from './components/LeftNav'
+import { VoicePanel } from './components/VoicePanel'
+import { VoiceWidget } from './components/VoiceWidget'
 import { api } from './lib/api'
 import type { TerminalPaneHandle } from './components/TerminalPane'
 
 // Lazy-load heavy components
 const MetricsPage = lazy(() => import('./components/MetricsPage'))
 const TerminalPane = lazy(() => import('./components/TerminalPane'))
-const ConversationPanel = lazy(() => import('./components/ConversationPanel'))
 const RunOutputPane = lazy(() => import('./components/RunOutputPane'))
 const NotesPanel = lazy(() => import('./components/NotesPanel').then(m => ({ default: m.NotesPanel })))
 
@@ -29,7 +30,7 @@ interface RunTab {
   projectName: string
 }
 
-type StaticTab = 'dann' | 'projects' | 'notes' | 'metrics' | 'voice'
+type StaticTab = 'dann' | 'projects' | 'notes' | 'metrics'
 type Tab = StaticTab | TerminalTab | RunTab
 
 function tabId(t: Tab): string {
@@ -42,7 +43,6 @@ function tabLabel(t: Tab): string {
   if (t === 'projects') return 'Projects'
   if (t === 'notes') return 'Notes'
   if (t === 'metrics') return 'Metrics'
-  if (t === 'voice') return 'Voice'
   if (t.kind === 'run') return `▶ ${t.projectName}`
   return t.projectName
 }
@@ -52,7 +52,7 @@ function tabLabel(t: Tab): string {
 export default function App() {
   useDannEvents()
 
-  const [tabs, setTabs] = useState<Tab[]>(['dann', 'projects', 'notes', 'voice', 'metrics'])
+  const [tabs, setTabs] = useState<Tab[]>(['dann', 'projects', 'notes', 'metrics'])
   const [activeTabId, setActiveTabId] = useState<string>('dann')
   const terminalRefs = useRef<Map<string, React.RefObject<TerminalPaneHandle>>>(new Map())
 
@@ -189,7 +189,7 @@ export default function App() {
         })}
       </nav>
 
-      {/* Body: left nav + tab content */}
+      {/* Body: left nav + tab content + persistent voice panel */}
       <div className="flex flex-1 overflow-hidden">
       <LeftNav />
 
@@ -232,12 +232,6 @@ export default function App() {
           </Suspense>
         </div>
 
-        <div className={`absolute inset-0 overflow-hidden ${activeTabId === 'voice' ? '' : 'opacity-0 pointer-events-none'}`}>
-          <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Loading…</div>}>
-            <ConversationPanel />
-          </Suspense>
-        </div>
-
         {/* Terminal tabs */}
         {tabs.filter((t): t is TerminalTab => typeof t !== 'string' && t.kind === 'terminal').map((tab) => (
           <div
@@ -270,8 +264,12 @@ export default function App() {
           </div>
         ))}
       </main>
+
+      {/* Permanent voice panel — always visible right sidebar */}
+      <VoicePanel />
       </div>
 
+      <VoiceWidget />
       <LogPanel />
     </div>
   )

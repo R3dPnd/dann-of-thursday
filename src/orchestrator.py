@@ -17,7 +17,7 @@ from src.audio import play_wav, record_until_silence
 from src.audio.capture import save_wav
 from src.config import load_config
 from src.event_bus import bus
-from src.llm import generate_response
+from src.llm import generate_response, generate_response_streaming
 from src.mcp_client import MCPManager
 from src.stt import transcribe_audio
 from src.stt import warmup as warmup_stt
@@ -70,6 +70,8 @@ _STT_SUBSTITUTIONS: dict[str, str] = {
 }
 
 _MIN_SPEECH_RMS = 0.005
+_MAX_HISTORY_TURNS = 10      # normal-mode sliding window (user+assistant pairs)
+_MAX_CODE_HISTORY_TURNS = 5  # code-mode context turns passed to ask_claude_code
 
 
 class Orchestrator:
@@ -91,6 +93,7 @@ class Orchestrator:
         self._user_paused = False
         self._wake_event = threading.Event()
         self._history: list[dict[str, Any]] = []
+        self._code_history: list[dict[str, Any]] = []
         self._mode = SessionMode.NORMAL
         self._code_project: str | None = None
         self._session_id: str | None = None
@@ -122,10 +125,9 @@ class Orchestrator:
         return False
 
     def _fix_stt(self, text: str) -> str:
-        lower = text.lower()
         for wrong, right in _STT_SUBSTITUTIONS.items():
-            lower = lower.replace(wrong, right)
-        return lower
+            text = re.sub(re.escape(wrong), right, text, flags=re.IGNORECASE)
+        return text
 
     def _is_json_artifact(self, text: str) -> bool:
         stripped = text.strip()
@@ -136,6 +138,17 @@ class Orchestrator:
             return True
         except (json.JSONDecodeError, ValueError):
             return False
+
+    def _format_code_task(self, task: str) -> str:
+        """Prepend recent code-mode conversation context to the current task."""
+        if not self._code_history:
+            return task
+        turns = self._code_history[-_MAX_CODE_HISTORY_TURNS * 2:]
+        ctx = "\n".join(
+            f"{'User' if m['role'] == 'user' else 'Dann'}: {m['content']}"
+            for m in turns
+        )
+        return f"Conversation so far:\n{ctx}\n\nCurrent question: {task}"
 
     def _detect_code_entry(self, text: str) -> str | None:
         """Return project name if text is a code-mode entry command, else None."""
@@ -181,6 +194,37 @@ class Orchestrator:
             self._detector.pause()
         bus.emit("voice.listening_changed", {"listening": False})
 
+    def stop(self) -> None:
+        """Graceful shutdown: speak goodbye if idle, stop detector, release MCP."""
+        self._running = False
+        self._wake_event.set()  # unblock the wait() in run()
+
+        # Speak goodbye only when not mid-session (avoids interrupting a turn)
+        if self._session_id is None:
+            try:
+                self._speak("Shutting down. Goodbye.")
+            except Exception:
+                pass
+
+        if self._detector:
+            try:
+                self._detector.stop()
+            except Exception:
+                pass
+
+        if self._mcp:
+            try:
+                self._mcp.stop()
+            except Exception:
+                pass
+
+        bus.emit("state.changed", {
+            "mode": "idle",
+            "project": None,
+            "session_id": None,
+            "running": False,
+        })
+
     # ── Audio ─────────────────────────────────────────────────────────────────
 
     def _speak(self, text: str) -> float:
@@ -193,7 +237,9 @@ class Orchestrator:
             speed=self._tts_cfg.get("speed", 1.0),
         )
         play_wav(tts_path, device=self._audio_cfg.get("output_device"))
-        return round((time.monotonic() - t0) * 1000)
+        tts_ms = round((time.monotonic() - t0) * 1000)
+        bus.emit("turn.tts.done", {"session_id": self._session_id})
+        return tts_ms
 
     def _record(self) -> bytes:
         return record_until_silence(
@@ -280,6 +326,7 @@ class Orchestrator:
         if self._mode == SessionMode.CODE and _CODE_EXIT_RE.search(text):
             self._set_mode(SessionMode.NORMAL, None)
             self._history.clear()
+            self._code_history.clear()
             print("[dann] Exiting code mode.", flush=True)
             tts_ms = self._speak("Exiting code mode, back to normal.")
             bus.emit("metric", {
@@ -298,6 +345,7 @@ class Orchestrator:
                     return True
                 self._set_mode(SessionMode.CODE, project)
                 self._history.clear()
+                self._code_history.clear()
                 print(f"[dann] Entering code mode for: {project}", flush=True)
                 tts_ms = self._speak(f"Entering code mode for {project}.")
                 if self._mcp:
@@ -333,7 +381,7 @@ class Orchestrator:
             try:
                 response = self._mcp.call_tool(
                     "ask_claude_code",
-                    {"project_name": self._code_project, "task": text},
+                    {"project_name": self._code_project, "task": self._format_code_task(text)},
                 )
                 code_ms = round((time.monotonic() - t0) * 1000)
                 status = "empty" if not response else "ok"
@@ -381,6 +429,8 @@ class Orchestrator:
                 return True
 
             print(f"[dann] {response}", flush=True)
+            self._code_history.append({"role": "user", "content": text})
+            self._code_history.append({"role": "assistant", "content": response})
             tts_ms = self._speak(response)
             bus.emit("metric", {
                 "session_id": self._session_id,
@@ -391,31 +441,92 @@ class Orchestrator:
 
         # ── Normal mode: Ollama ───────────────────────────────────────────────
         print("[dann] Thinking...", flush=True)
-        self._speak("Hmm, one moment.")
         mcp_tools = self._mcp.tools if self._mcp else None
+        model = self._ollama_cfg.get("model", "llama3.2")
         t0 = time.monotonic()
-        response = generate_response(
+
+        if mcp_tools:
+            # Tool calls require the non-streaming path (responses interleave with tool round-trips)
+            self._speak("Hmm, one moment.")
+            response = generate_response(
+                text,
+                base_url=self._ollama_cfg.get("base_url", "http://localhost:11434"),
+                model=model,
+                system_prompt=self._ollama_cfg.get("system_prompt", ""),
+                temperature=self._ollama_cfg.get("temperature", 0.7),
+                max_tokens=self._ollama_cfg.get("max_tokens", 80),
+                tools=mcp_tools,
+                mcp=self._mcp,
+                history=self._history,
+            )
+            llm_ms = round((time.monotonic() - t0) * 1000)
+            bus.emit("turn.llm", {
+                "session_id": self._session_id,
+                "text": response or "",
+                "latency_ms": llm_ms,
+                "model": model,
+            })
+
+            if not response:
+                print("[dann] No response from Ollama.", flush=True)
+                bus.emit("metric", {
+                    "session_id": self._session_id,
+                    "mode": "normal", "stt_ms": stt_ms, "llm_ms": llm_ms,
+                    "tts_ms": 0, "code_ms": 0, "blank": False, "status": "empty",
+                })
+                return True
+
+            if self._is_json_artifact(response):
+                print(f"[dann] (suppressed JSON artifact): {response}", flush=True)
+                bus.emit("error", {
+                    "module": "orchestrator",
+                    "message": "LLM returned a raw JSON artifact; suppressed from TTS.",
+                    "traceback": None,
+                })
+                tts_ms = self._speak("Sorry, I couldn't complete that. Could you rephrase?")
+                bus.emit("metric", {
+                    "session_id": self._session_id,
+                    "mode": "normal", "stt_ms": stt_ms, "llm_ms": llm_ms,
+                    "tts_ms": tts_ms, "code_ms": 0, "blank": False, "status": "json_artifact",
+                })
+                return True
+
+            print(f"[dann] {response}", flush=True)
+            self._history.append({"role": "user", "content": text})
+            self._history.append({"role": "assistant", "content": response})
+            if len(self._history) > _MAX_HISTORY_TURNS * 2:
+                self._history = self._history[-_MAX_HISTORY_TURNS * 2:]
+            tts_ms = self._speak(response)
+            bus.emit("metric", {
+                "session_id": self._session_id,
+                "mode": "normal", "stt_ms": stt_ms, "llm_ms": llm_ms,
+                "tts_ms": tts_ms, "code_ms": 0, "blank": False, "status": "ok",
+            })
+            return True
+
+        # Streaming path — speak each sentence chunk as it arrives
+        gen = generate_response_streaming(
             text,
             base_url=self._ollama_cfg.get("base_url", "http://localhost:11434"),
-            model=self._ollama_cfg.get("model", "llama3.2"),
+            model=model,
             system_prompt=self._ollama_cfg.get("system_prompt", ""),
             temperature=self._ollama_cfg.get("temperature", 0.7),
             max_tokens=self._ollama_cfg.get("max_tokens", 80),
-            tools=mcp_tools or None,
-            mcp=self._mcp,
             history=self._history,
         )
-        llm_ms = round((time.monotonic() - t0) * 1000)
 
-        bus.emit("turn.llm", {
-            "session_id": self._session_id,
-            "text": response or "",
-            "latency_ms": llm_ms,
-            "model": self._ollama_cfg.get("model", "llama3.2"),
-        })
-
-        if not response:
+        response_parts: list[str] = []
+        tts_ms = 0
+        try:
+            first_chunk = next(gen)
+            llm_ms = round((time.monotonic() - t0) * 1000)  # time-to-first-token
+        except StopIteration:
+            llm_ms = round((time.monotonic() - t0) * 1000)
             print("[dann] No response from Ollama.", flush=True)
+            bus.emit("turn.llm", {
+                "session_id": self._session_id, "text": "",
+                "latency_ms": llm_ms, "model": model,
+            })
             bus.emit("metric", {
                 "session_id": self._session_id,
                 "mode": "normal", "stt_ms": stt_ms, "llm_ms": llm_ms,
@@ -423,25 +534,53 @@ class Orchestrator:
             })
             return True
 
-        if self._is_json_artifact(response):
-            print(f"[dann] (suppressed JSON artifact): {response}", flush=True)
-            bus.emit("error", {
-                "module": "orchestrator",
-                "message": "LLM returned a raw JSON artifact; suppressed from TTS.",
-                "traceback": None,
-            })
-            tts_ms = self._speak("Sorry, I couldn't complete that. Could you rephrase?")
-            bus.emit("metric", {
-                "session_id": self._session_id,
-                "mode": "normal", "stt_ms": stt_ms, "llm_ms": llm_ms,
-                "tts_ms": tts_ms, "code_ms": 0, "blank": False, "status": "json_artifact",
-            })
-            return True
+        if first_chunk.strip().startswith(("{", "[")):
+            # Potential JSON artifact — buffer everything before speaking
+            response_parts.append(first_chunk)
+            for chunk in gen:
+                response_parts.append(chunk)
+            response = " ".join(response_parts).strip()
+            if self._is_json_artifact(response):
+                print(f"[dann] (suppressed JSON artifact): {response}", flush=True)
+                bus.emit("error", {
+                    "module": "orchestrator",
+                    "message": "LLM returned a raw JSON artifact; suppressed from TTS.",
+                    "traceback": None,
+                })
+                tts_ms = self._speak("Sorry, I couldn't complete that. Could you rephrase?")
+                bus.emit("turn.llm", {
+                    "session_id": self._session_id, "text": response,
+                    "latency_ms": llm_ms, "model": model,
+                })
+                bus.emit("metric", {
+                    "session_id": self._session_id,
+                    "mode": "normal", "stt_ms": stt_ms, "llm_ms": llm_ms,
+                    "tts_ms": tts_ms, "code_ms": 0, "blank": False, "status": "json_artifact",
+                })
+                return True
+            tts_ms = self._speak(response)
+        else:
+            # Normal streaming — speak each chunk as it arrives
+            response_parts.append(first_chunk)
+            bus.emit("turn.llm.chunk", {"session_id": self._session_id, "chunk": first_chunk, "index": 0})
+            tts_ms += self._speak(first_chunk)
+            for i, chunk in enumerate(gen, 1):
+                response_parts.append(chunk)
+                bus.emit("turn.llm.chunk", {"session_id": self._session_id, "chunk": chunk, "index": i})
+                tts_ms += self._speak(chunk)
+            response = " ".join(response_parts).strip()
 
+        bus.emit("turn.llm", {
+            "session_id": self._session_id,
+            "text": response,
+            "latency_ms": llm_ms,
+            "model": model,
+        })
         print(f"[dann] {response}", flush=True)
         self._history.append({"role": "user", "content": text})
         self._history.append({"role": "assistant", "content": response})
-        tts_ms = self._speak(response)
+        if len(self._history) > _MAX_HISTORY_TURNS * 2:
+            self._history = self._history[-_MAX_HISTORY_TURNS * 2:]
         bus.emit("metric", {
             "session_id": self._session_id,
             "mode": "normal", "stt_ms": stt_ms, "llm_ms": llm_ms,
@@ -454,6 +593,7 @@ class Orchestrator:
         if self._detector:
             self._detector.pause()
         self._history.clear()
+        self._code_history.clear()
         self._session_id = str(uuid.uuid4())
         self._set_mode(SessionMode.NORMAL, None)
 
@@ -557,6 +697,7 @@ class Orchestrator:
             "mode": self._mode.value,
             "project": None,
             "session_id": None,
+            "running": True,
         })
 
         print(f"[dann] Listening for '{wake_phrase}'... (Ctrl+C to stop)", flush=True)

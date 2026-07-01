@@ -70,12 +70,17 @@ export function StatusBar() {
       </div>
 
       {/* Right: WS connection indicator */}
-      <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-        <span
-          className={`inline-block h-1.5 w-1.5 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-zinc-600'}`}
-        />
-        {wsConnected ? 'connected' : 'disconnected'}
-      </div>
+      {wsConnected ? (
+        <div className="flex items-center gap-1.5 text-xs text-zinc-600">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500/70" />
+          connected
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 text-xs text-neon-red animate-pulse">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
+          offline
+        </div>
+      )}
     </header>
   )
 }

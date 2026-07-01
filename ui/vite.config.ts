@@ -10,6 +10,13 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            // Suppress ECONNABORTED — fires when a browser tab closes mid-proxy
+            if ((err as NodeJS.ErrnoException).code === 'ECONNABORTED') return
+            console.error('[proxy]', err.message)
+          })
+        },
       },
     },
   },

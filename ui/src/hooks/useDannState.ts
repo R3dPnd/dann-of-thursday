@@ -1,8 +1,22 @@
 import { create } from 'zustand'
-import type { CodeTurn, LogEntry, MetricSummary, Mode, PipelineStage, Project, StateSnapshot, VoiceTurn } from '../types'
+import type { CodeTurn, LogEntry, MetricSummary, Mode, PipelineStage, Project, RawEvent, StateSnapshot, VoiceTurn } from '../types'
 
 const MAX_LOG_ENTRIES = 2000
 const MAX_VOICE_TURNS = 200
+const MAX_RAW_EVENTS  = 200
+
+function summarisePayload(type: string, payload: Record<string, unknown>): string {
+  if (type === 'turn.stt')       return `"${String(payload.text ?? '').slice(0, 60)}"`
+  if (type === 'turn.llm')       return `${payload.latency_ms}ms — "${String(payload.text ?? '').slice(0, 40)}"`
+  if (type === 'turn.llm.chunk') return String(payload.chunk ?? '').slice(0, 40)
+  if (type === 'turn.code')      return `[${payload.status}] ${String(payload.task ?? '').slice(0, 40)}`
+  if (type === 'metric')         return `stt:${payload.stt_ms} llm:${payload.llm_ms} tts:${payload.tts_ms} → ${payload.status}`
+  if (type === 'error')          return String(payload.message ?? '')
+  if (type === 'state.changed')  return `mode=${payload.mode} running=${payload.running}`
+  if (type === 'session.start')  return String(payload.session_id ?? '').slice(0, 12)
+  if (type === 'session.end')    return String(payload.reason ?? '')
+  return ''
+}
 
 interface DannStore {
   // Orchestrator state
@@ -15,27 +29,31 @@ interface DannStore {
   // WebSocket connection
   wsConnected: boolean
 
-  // Voice pipeline stage
+  // Voice pipeline stage + when it started (for live duration display)
   pipelineStage: PipelineStage
-  // Pending STT text waiting to be paired with an LLM response
+  stageEnteredAt: number
   _pendingStt: string | null
+  liveResponse: string
 
   // Projects
   projects: Project[]
   noteProjects: Project[]
 
-  // Voice conversation history (all modes)
+  // Voice conversation history
   voiceTurns: VoiceTurn[]
 
-  // Per-project CODE-mode turn history (project name → turns)
+  // Per-project CODE-mode turn history
   codeHistory: Record<string, CodeTurn[]>
 
   // Metrics
   metricSummary: MetricSummary | null
 
-  // Live log entries streamed via WebSocket (capped at MAX_LOG_ENTRIES)
+  // Log entries (capped)
   logEntries: LogEntry[]
   unreadErrors: number
+
+  // Raw WebSocket events for the debug panel (capped)
+  rawEvents: RawEvent[]
 
   // Actions
   applySnapshot: (snapshot: StateSnapshot) => void
@@ -45,6 +63,11 @@ interface DannStore {
   setNoteProjects: (notes: Project[]) => void
   setMetricSummary: (summary: MetricSummary) => void
   clearUnreadErrors: () => void
+  prependTurns: (turns: VoiceTurn[]) => void
+}
+
+function setStage(stage: PipelineStage): Partial<DannStore> {
+  return { pipelineStage: stage, stageEnteredAt: Date.now() }
 }
 
 export const useDannStore = create<DannStore>((set) => ({
@@ -55,7 +78,9 @@ export const useDannStore = create<DannStore>((set) => ({
   voiceListening: true,
   wsConnected: false,
   pipelineStage: 'idle',
+  stageEnteredAt: Date.now(),
   _pendingStt: null,
+  liveResponse: '',
   projects: [],
   noteProjects: [],
   voiceTurns: [],
@@ -63,6 +88,7 @@ export const useDannStore = create<DannStore>((set) => ({
   metricSummary: null,
   logEntries: [],
   unreadErrors: 0,
+  rawEvents: [],
 
   applySnapshot: (snapshot) =>
     set({
@@ -74,13 +100,22 @@ export const useDannStore = create<DannStore>((set) => ({
     }),
 
   applyEvent: (type, payload) => {
+    // Push every event to the raw debug log
+    set((s) => {
+      const entry: RawEvent = { ts: Date.now(), type, summary: summarisePayload(type, payload) }
+      const rawEvents = [...s.rawEvents, entry]
+      if (rawEvents.length > MAX_RAW_EVENTS) rawEvents.splice(0, rawEvents.length - MAX_RAW_EVENTS)
+      return { rawEvents }
+    })
+
     switch (type) {
       case 'state.changed':
-        set({
+        set((s) => ({
           mode: (payload.mode as Mode) ?? 'idle',
           project: (payload.project as string | null) ?? null,
           sessionId: (payload.session_id as string | null) ?? null,
-        })
+          running: payload.running !== undefined ? (payload.running as boolean) : s.running,
+        }))
         break
 
       case 'voice.listening_changed':
@@ -88,23 +123,32 @@ export const useDannStore = create<DannStore>((set) => ({
         break
 
       case 'session.start':
-        set({ sessionId: payload.session_id as string, pipelineStage: 'wake' })
+        set({ sessionId: payload.session_id as string, ...setStage('wake') })
         break
 
       case 'session.end':
-        set({ sessionId: null, mode: 'idle', pipelineStage: 'idle', _pendingStt: null })
+        set({ sessionId: null, mode: 'idle', ...setStage('idle'), _pendingStt: null, liveResponse: '' })
         break
 
       case 'turn.start':
-        set({ pipelineStage: 'recording' })
+        set({ ...setStage('recording'), liveResponse: '' })
+        break
+
+      case 'turn.llm.chunk':
+        set((s) => ({
+          ...setStage('speaking'),
+          liveResponse: s.liveResponse
+            ? s.liveResponse + ' ' + ((payload.chunk as string) ?? '')
+            : (payload.chunk as string) ?? '',
+        }))
         break
 
       case 'turn.stt': {
         const text = (payload.text as string) ?? ''
         if (!text) {
-          set({ pipelineStage: 'idle', _pendingStt: null })
+          set({ ...setStage('idle'), _pendingStt: null })
         } else {
-          set({ pipelineStage: 'thinking', _pendingStt: text })
+          set({ ...setStage('thinking'), _pendingStt: text })
         }
         break
       }
@@ -112,6 +156,7 @@ export const useDannStore = create<DannStore>((set) => ({
       case 'turn.llm': {
         const dannText = (payload.text as string) ?? ''
         set((state) => {
+          const wasStreaming = !!state.liveResponse
           const turn: VoiceTurn = {
             id: `${Date.now()}-${Math.random()}`,
             sessionId: (payload.session_id as string | null) ?? state.sessionId,
@@ -122,10 +167,35 @@ export const useDannStore = create<DannStore>((set) => ({
           }
           const turns = [...state.voiceTurns, turn]
           if (turns.length > MAX_VOICE_TURNS) turns.splice(0, turns.length - MAX_VOICE_TURNS)
-          return { voiceTurns: turns, pipelineStage: 'speaking', _pendingStt: null }
+          return {
+            voiceTurns: turns,
+            ...(wasStreaming ? setStage('idle') : setStage('speaking')),
+            _pendingStt: null,
+            liveResponse: '',
+          }
         })
-        // After speaking, pipeline returns to idle (approximate — no turn.tts event)
-        setTimeout(() => set((s) => s.pipelineStage === 'speaking' ? { pipelineStage: 'idle' } : {}), 3000)
+        break
+      }
+
+      case 'turn.tts.done':
+        set((s) => s.pipelineStage === 'speaking' ? setStage('idle') : {})
+        break
+
+      case 'metric': {
+        // Attach trace data to the most recent completed turn
+        const trace = {
+          stt_ms:  (payload.stt_ms  as number | null) ?? null,
+          llm_ms:  (payload.llm_ms  as number | null) ?? null,
+          tts_ms:  (payload.tts_ms  as number | null) ?? null,
+          code_ms: (payload.code_ms as number | null) ?? null,
+          status:  (payload.status  as string)        ?? 'ok',
+        }
+        set((state) => {
+          if (state.voiceTurns.length === 0) return {}
+          const turns = [...state.voiceTurns]
+          turns[turns.length - 1] = { ...turns[turns.length - 1], trace }
+          return { voiceTurns: turns }
+        })
         break
       }
 
@@ -163,7 +233,7 @@ export const useDannStore = create<DannStore>((set) => ({
               [project]: [...(state.codeHistory[project] ?? []), codeTurn],
             },
             voiceTurns,
-            pipelineStage: 'speaking' as PipelineStage,
+            ...setStage('speaking'),
             _pendingStt: null,
             metricSummary: {
               period: 'session',
@@ -177,7 +247,6 @@ export const useDannStore = create<DannStore>((set) => ({
             },
           }
         })
-        setTimeout(() => set((s) => s.pipelineStage === 'speaking' ? { pipelineStage: 'idle' } : {}), 3000)
         break
       }
 
@@ -222,8 +291,9 @@ export const useDannStore = create<DannStore>((set) => ({
   },
 
   setWsConnected: (connected) => set({ wsConnected: connected }),
-  setProjects: (projects) => set({ projects }),
-  setNoteProjects: (notes) => set({ noteProjects: notes }),
-  setMetricSummary: (summary) => set({ metricSummary: summary }),
-  clearUnreadErrors: () => set({ unreadErrors: 0 }),
+  setProjects:    (projects)  => set({ projects }),
+  setNoteProjects:(notes)     => set({ noteProjects: notes }),
+  setMetricSummary:(summary)  => set({ metricSummary: summary }),
+  clearUnreadErrors: ()       => set({ unreadErrors: 0 }),
+  prependTurns: (turns)       => set((s) => ({ voiceTurns: [...turns, ...s.voiceTurns] })),
 }))

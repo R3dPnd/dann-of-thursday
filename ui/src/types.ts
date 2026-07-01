@@ -1,6 +1,14 @@
 export type Mode = 'idle' | 'normal' | 'code'
 export type PipelineStage = 'idle' | 'wake' | 'recording' | 'thinking' | 'speaking'
 
+export interface TurnTrace {
+  stt_ms: number | null
+  llm_ms: number | null
+  tts_ms: number | null
+  code_ms: number | null
+  status: string
+}
+
 export interface VoiceTurn {
   id: string
   sessionId: string | null
@@ -9,6 +17,13 @@ export interface VoiceTurn {
   dannText: string
   mode: 'normal' | 'code'
   project?: string
+  trace?: TurnTrace
+}
+
+export interface RawEvent {
+  ts: number
+  type: string
+  summary: string
 }
 
 export interface Project {

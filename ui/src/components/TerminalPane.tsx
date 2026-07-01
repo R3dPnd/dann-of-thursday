@@ -1,10 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-
-const FIXED_COLS = 220
-const FIXED_ROWS = 50
 
 export interface TerminalPaneHandle {
   focus(): void
@@ -24,6 +22,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
   ({ sessionId, isActive, onExit }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const termRef = useRef<Terminal | null>(null)
+    const fitAddonRef = useRef<FitAddon | null>(null)
     const wsRef = useRef<WebSocket | null>(null)
     const onExitRef = useRef(onExit)
     onExitRef.current = onExit
@@ -47,6 +46,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
       },
     }))
 
+    function sendResize() {
+      const term = termRef.current
+      const ws = wsRef.current
+      if (!term || ws?.readyState !== WebSocket.OPEN) return
+      ws.send(JSON.stringify({ type: 'resize', rows: term.rows, cols: term.cols }))
+    }
+
     function connect() {
       const term = termRef.current
       if (!term) return
@@ -56,7 +62,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
       wsRef.current = ws
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'resize', rows: FIXED_ROWS, cols: FIXED_COLS }))
+        sendResize()
         term.focus()
       }
 
@@ -88,8 +94,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
       if (!containerRef.current) return
 
       const term = new Terminal({
-        cols: FIXED_COLS,
-        rows: FIXED_ROWS,
         theme: {
           background: '#09090b',
           foreground: '#e4e4e7',
@@ -112,8 +116,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
         allowProposedApi: true,
       })
 
+      const fitAddon = new FitAddon()
+      fitAddonRef.current = fitAddon
+      term.loadAddon(fitAddon)
       term.loadAddon(new WebLinksAddon())
       term.open(containerRef.current)
+      fitAddon.fit()
       termRef.current = term
 
       term.onData((data) => {
@@ -124,17 +132,25 @@ const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
 
       connect()
 
+      const ro = new ResizeObserver(() => {
+        fitAddon.fit()
+        sendResize()
+      })
+      ro.observe(containerRef.current)
+
       return () => {
+        ro.disconnect()
         wsRef.current?.close()
         term.dispose()
         termRef.current = null
+        fitAddonRef.current = null
         wsRef.current = null
       }
     }, [sessionId]) // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
-      <div className="h-full w-full overflow-auto bg-zinc-950 p-2">
-        <div ref={containerRef} />
+      <div className="h-full w-full overflow-hidden bg-zinc-950 p-2">
+        <div ref={containerRef} className="h-full w-full" />
       </div>
     )
   }

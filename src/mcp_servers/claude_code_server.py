@@ -4,6 +4,8 @@
 Exposed tools:
   list_projects      — return configured (or auto-discovered) git repos
   open_claude_code   — open a new Terminal running `claude` in a project directory
+  ask_claude_code    — run Claude Code non-interactively and return its response
+  ask_claude         — route a query to Claude API for deep reasoning/analysis
 """
 
 import os
@@ -198,6 +200,42 @@ def ask_claude_code(project_name: str, task: str) -> str:
 
     output = result.stdout.strip()
     return output if output else "Claude Code returned an empty response."
+
+
+@mcp.tool()
+def ask_claude(question: str, context: str = "") -> str:
+    """Route a question to Claude for deep reasoning or analysis.
+
+    Use this when the query needs broad knowledge, nuanced reasoning, detailed
+    explanation, or creative thinking beyond what the local model handles well.
+    Returns a spoken-friendly response (no markdown, 1-3 sentences).
+
+    Args:
+        question: The question or task for Claude.
+        context: Optional extra context to help Claude give a better answer.
+    """
+    prompt = f"{context.strip()}\n\n{question.strip()}" if context.strip() else question.strip()
+
+    # Append TTS formatting instruction so the response is speakable
+    full_prompt = (
+        f"{prompt}\n\n"
+        "Answer in 1-3 concise spoken sentences. "
+        "No markdown, bullet points, or formatting — your response will be read aloud."
+    )
+
+    result = subprocess.run(
+        ["claude", "-p", full_prompt],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+    if result.returncode != 0:
+        err = result.stderr.strip()
+        return f"Claude returned an error: {err or 'unknown error'}"
+
+    output = result.stdout.strip()
+    return output if output else "Claude returned an empty response."
 
 
 if __name__ == "__main__":

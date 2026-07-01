@@ -17,6 +17,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -77,16 +78,22 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    # Wire persistence services to the EventBus (always, regardless of voice mode).
     from src.event_bus import bus
-    from app.services import metrics_service, log_service
+    from app.services import history_service, log_service, metrics_service
     bus.subscribe(metrics_service.record_metric)
     bus.subscribe(log_service.record_event)
+    bus.subscribe(history_service.record_event)
 
     no_voice = os.environ.get("NO_VOICE", "0").strip() not in ("", "0", "false", "no")
     if not no_voice:
         t = threading.Thread(target=_start_orchestrator, daemon=True, name="orchestrator")
         t.start()
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    if orchestrator is not None:
+        orchestrator.stop()
 
 
 @app.get("/", tags=["health"])
@@ -101,6 +108,12 @@ async def root():
 @app.get("/health", tags=["health"])
 async def health_check():
     return {"status": "healthy", "service": settings.PROJECT_NAME}
+
+
+# Serve built React app — must be last so explicit routes above always win
+_ui_dist = Path(__file__).resolve().parent.parent / "ui" / "dist"
+if _ui_dist.exists():
+    app.mount("/", StaticFiles(directory=str(_ui_dist), html=True), name="ui")
 
 
 if __name__ == "__main__":

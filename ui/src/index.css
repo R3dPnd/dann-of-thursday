@@ -78,6 +78,13 @@ header.status-bar {
   color: #bbddff;
 }
 
+/* Voice widget — persistent bottom strip */
+.voice-widget {
+  border-top: 1px solid #00ffdd18;
+  background: #00ffdd04;
+  box-shadow: 0 -1px 12px #00ffdd08;
+}
+
 /* Log panel — red top border */
 .log-panel {
   border-top: 1px solid #ff337744;

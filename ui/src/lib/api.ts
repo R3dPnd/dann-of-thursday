@@ -57,6 +57,11 @@ export const api = {
   closeTerminal: (sessionId: string) =>
     fetch(`/api/v1/terminals/${sessionId}`, { method: 'DELETE' }).catch(() => {}),
 
+  getHistory: (limit = 100, offset = 0) =>
+    get<{ total: number; offset: number; limit: number; records: Record<string, unknown>[] }>(
+      `/history?limit=${limit}&offset=${offset}`
+    ).then(r => r.records),
+
   triggerVoice: () => post<{ triggered: boolean }>('/voice/trigger'),
   enableVoice: () => post<{ listening: boolean }>('/voice/enable'),
   disableVoice: () => post<{ listening: boolean }>('/voice/disable'),
