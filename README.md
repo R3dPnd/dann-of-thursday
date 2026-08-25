@@ -6,6 +6,15 @@ Voice AI agent: say **"ok Dann"** to ask questions. Uses wake word → STT (fast
 
 ## Setup (macOS)
 
+Guided setup (recommended) — walks through each pipeline stage, explains
+what it's for, and only touches things you confirm:
+
+```bash
+bash scripts/setup.sh
+```
+
+Or manually:
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
