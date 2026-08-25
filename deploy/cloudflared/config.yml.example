@@ -1,0 +1,36 @@
+# cloudflared ingress config for the "dann-workstation" tunnel.
+#
+# Setup (once):
+#   brew install cloudflared
+#   cloudflared tunnel login
+#   cloudflared tunnel create dann-workstation
+#   cp deploy/cloudflared/config.yml.example deploy/cloudflared/config.yml
+#   # fill in <TUNNEL_ID> below with the id printed by `tunnel create`
+#   cloudflared tunnel route dns dann-workstation dann.yourdomain.com
+#   cloudflared tunnel route dns dann-workstation code.yourdomain.com
+#   cloudflared tunnel route dns dann-workstation notebook.yourdomain.com
+#   cloudflared tunnel route dns dann-workstation files.yourdomain.com
+#
+# Each hostname below MUST also have a Cloudflare Access application +
+# policy configured in the Zero Trust dashboard (Access > Applications)
+# before it's reachable — cloudflared alone does not authenticate anyone.
+# See README.md "Local AI Workstation" for the full walkthrough.
+
+tunnel: <TUNNEL_ID>
+credentials-file: /Users/<you>/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: dann.yourdomain.com
+    service: http://localhost:8000
+
+  - hostname: code.yourdomain.com
+    service: http://localhost:8080
+
+  - hostname: notebook.yourdomain.com
+    service: http://localhost:8888
+
+  - hostname: files.yourdomain.com
+    service: http://localhost:8081
+
+  # Catch-all: anything not matched above gets dropped instead of proxied.
+  - service: http_status:404

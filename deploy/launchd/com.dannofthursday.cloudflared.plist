@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Runs the Cloudflare Tunnel that exposes the workstation's services
+  publicly (via Access-gated hostnames — see deploy/cloudflared/config.yml).
+
+  Install:
+    sed -i '' "s#__REPO_PATH__#$(pwd)#g" deploy/launchd/com.dannofthursday.cloudflared.plist
+    cp deploy/launchd/com.dannofthursday.cloudflared.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.dannofthursday.cloudflared.plist
+
+  Logs:  /tmp/dann-cloudflared.log / /tmp/dann-cloudflared.err
+  Stop:  launchctl unload ~/Library/LaunchAgents/com.dannofthursday.cloudflared.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dannofthursday.cloudflared</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/cloudflared</string>
+    <string>tunnel</string>
+    <string>--config</string>
+    <string>__REPO_PATH__/deploy/cloudflared/config.yml</string>
+    <string>run</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/dann-cloudflared.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/dann-cloudflared.err</string>
+</dict>
+</plist>

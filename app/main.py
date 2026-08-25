@@ -73,6 +73,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if settings.CF_ACCESS_ENABLED:
+    from app.core.cf_access import CloudflareAccessMiddleware
+    app.add_middleware(CloudflareAccessMiddleware)
+
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Runs the Dann FastAPI backend (voice pipeline + dashboard API) at login
+  and keeps it alive.
+
+  Install:
+    sed -i '' "s#__REPO_PATH__#$(pwd)#g" deploy/launchd/com.dannofthursday.backend.plist
+    cp deploy/launchd/com.dannofthursday.backend.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.dannofthursday.backend.plist
+
+  Logs:  /tmp/dann-backend.log / /tmp/dann-backend.err
+  Stop:  launchctl unload ~/Library/LaunchAgents/com.dannofthursday.backend.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dannofthursday.backend</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO_PATH__/.venv/bin/uvicorn</string>
+    <string>app.main:app</string>
+    <string>--host</string>
+    <string>0.0.0.0</string>
+    <string>--port</string>
+    <string>8000</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO_PATH__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/dann-backend.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/dann-backend.err</string>
+</dict>
+</plist>
