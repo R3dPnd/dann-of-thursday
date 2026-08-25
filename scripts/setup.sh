@@ -98,18 +98,56 @@ EOF
 step "1/5  Python environment"
 explain "Dann's voice pipeline and its FastAPI backend are Python. This
 creates an isolated virtualenv (.venv) so its dependencies (faster-whisper,
-piper-tts, pvporcupine, fastapi, ...) don't collide with anything else on
-your system, then installs everything from requirements.txt into it."
+piper-tts, pvporcupine, fastapi, mcp, ...) don't collide with anything else
+on your system, then installs everything from requirements.txt into it.
+requirements.txt needs Python 3.10+ (the mcp package requires it) — macOS's
+built-in python3 is often older than that, so this checks first."
+
+python_is_new_enough() {
+  "$1" -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3, 10) else 1)' 2>/dev/null
+}
+
+find_good_python() {
+  for cand in python3.13 python3.12 python3.11 python3.10 python3; do
+    if command -v "$cand" >/dev/null 2>&1 && python_is_new_enough "$cand"; then
+      command -v "$cand"; return 0
+    fi
+  done
+  return 1
+}
+
+if [ -x .venv/bin/python ] && ! python_is_new_enough .venv/bin/python; then
+  todo ".venv exists but was created with $(.venv/bin/python --version 2>&1) — too old for requirements.txt"
+  if confirm "Delete and recreate it with a newer Python?"; then
+    rm -rf .venv
+  else
+    todo "skipped — recreate .venv with Python 3.10+ yourself and re-run"
+    exit 0
+  fi
+fi
 
 if [ -d .venv ]; then
-  ok ".venv already exists"
+  ok ".venv already exists ($(.venv/bin/python --version 2>&1))"
 else
-  if confirm "Create .venv and install dependencies now?"; then
-    python3 -m venv .venv
+  PYTHON_BIN=$(find_good_python || true)
+  if [ -z "$PYTHON_BIN" ]; then
+    todo "no Python 3.10+ found (system python3 is $(python3 --version 2>&1))"
+    if confirm "Install Python 3.12 via Homebrew (doesn't touch the system Python)?"; then
+      command -v brew >/dev/null || { echo "Homebrew is required: https://brew.sh"; exit 1; }
+      brew install python@3.12
+      PYTHON_BIN="$(brew --prefix python@3.12)/bin/python3.12"
+    else
+      todo "skipped — install Python 3.10+ yourself and re-run this script"
+      exit 0
+    fi
+  fi
+
+  if confirm "Create .venv using $PYTHON_BIN?"; then
+    "$PYTHON_BIN" -m venv .venv
     ok "created .venv"
   else
     todo "skipped — nothing else in this script will work until you run:"
-    todo "  python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
+    todo "  $PYTHON_BIN -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
     exit 0
   fi
 fi
