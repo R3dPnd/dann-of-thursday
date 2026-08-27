@@ -4,6 +4,88 @@
 
 Voice AI agent: say **"ok Dann"** to ask questions. Uses wake word → STT (faster-whisper) → Ollama → Piper TTS.
 
+## What this is
+
+Dann is a **local-first** voice assistant. Every stage of the pipeline —
+wake word detection, transcription, reasoning, speech synthesis — runs on
+this machine. Nothing leaves it unless a question is explicitly routed to
+Claude (local Ollama models handle most turns).
+
+On top of that voice loop sits a FastAPI backend + React dashboard that
+mirrors the pipeline's state live, and an MCP bridge that lets Dann drive
+an actual Claude Code session — so "ok Dann, open Claude Code in \<project\>"
+hands off a spoken conversation to a real coding agent.
+
+For a full breakdown of languages, libraries, and *why* each one was
+chosen, see [TECH_SPEC.md](TECH_SPEC.md). This section covers how the
+pieces fit together at runtime.
+
+## How it works
+
+### The voice pipeline
+
+```
+"ok Dann" ─▶ wake word ─▶ record ─▶ STT ─▶ LLM router ─▶ TTS ─▶ speak
+             Porcupine/     mic     faster-  Ollama         Piper  speaker
+             openWakeWord           whisper  (local)         local
+```
+
+`src/orchestrator.py` drives this loop. On each turn:
+
+1. The wake word detector (`src/wakeword/`) listens to a live mic stream
+   and only wakes the rest of the pipeline once it hears "ok Dann" —
+   everything downstream is comparatively expensive, so this gate matters.
+2. `src/audio/capture.py` records until silence (or a max duration), then
+   `src/stt/whisper.py` (faster-whisper) transcribes it locally.
+3. The transcript goes to `src/llm/ollama.py`, which calls a local Ollama
+   model running under a **routing system prompt** (`config.yaml`'s
+   `ollama.system_prompt`). The model decides per-turn whether to answer
+   directly, or call one of four tools:
+   - `ask_claude` — hands complex/broad questions to the Claude API instead
+     of the local model.
+   - `ask_claude_code` / `open_claude_code` — routes project-specific
+     questions, or an explicit request to start coding, to Claude Code via
+     MCP (`src/mcp_client.py`, `src/mcp_servers/claude_code_server.py`).
+   - `list_projects` — reads the `projects` list out of `config.yaml`.
+4. The response text is synthesized by `src/tts/piper.py` and played back
+   through `src/audio/playback.py`.
+
+Every step emits an event onto `src/event_bus.py` — that's what the
+dashboard subscribes to, and what makes "watch Dann think" possible.
+
+### Code mode
+
+Saying something like "open Claude Code in \<project\>" flips the session
+into `SessionMode.CODE` (see `src/orchestrator.py`): Ollama routing is
+bypassed entirely, conversation history resets, and every subsequent turn
+goes straight to Claude Code over MCP until you say a goodbye phrase or ask
+to exit code mode. This is the mechanism behind treating Dann as a voice
+front-end for an agentic coding session rather than just a Q&A assistant.
+
+### The dashboard
+
+`app/main.py` runs a FastAPI backend that either (a) starts the voice
+orchestrator in a background thread and shares its `EventBus`, or (b) runs
+standalone with `NO_VOICE=1` for UI development without audio hardware.
+Three services subscribe to the event bus and persist what they see:
+`metrics_service` (turn latency/counts), `log_service` (structured logs),
+`history_service` (conversation history) — all exposed over REST + a
+WebSocket event stream to the `ui/` React app, which renders live pipeline
+state, project panels, terminal output, and metrics. See
+[UI_SPEC.md](UI_SPEC.md) for the dashboard's detailed spec.
+
+## Project layout
+
+```
+src/          Voice pipeline (wake word → STT → LLM → TTS)
+app/          FastAPI backend + API (serves dashboard state, REST, WebSocket)
+ui/           React + Tailwind dashboard (Vite dev server / optional Electron)
+models/       Wake word models, Piper voice, openwakeword submodule
+scripts/      Guided setup (scripts/setup.sh) and workstation bootstrap
+deploy/       Cloudflare Tunnel + launchd templates for remote access
+config.yaml   Runtime config (audio, STT, TTS, wake word, Ollama, projects)
+```
+
 ## Setup (macOS)
 
 Guided setup (recommended) — walks through each pipeline stage, explains
@@ -40,6 +122,21 @@ python -m src.main
 ```
 
 Say "ok Dann" then ask your question.
+
+### Dashboard
+
+The backend and voice pipeline share one process by default — starting the
+API also starts the orchestrator. To develop the dashboard without a mic:
+
+```bash
+NO_VOICE=1 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd ui && npm install && npm run dev   # http://localhost:3000, proxies to :8000
+```
+
+With voice enabled (`NO_VOICE` unset), the same backend command also runs
+the orchestrator, so `http://localhost:8000` and the OpenAPI docs at
+`/docs` are live alongside the mic pipeline. See "How it works" above for
+what the dashboard is actually showing you.
 
 ## Local AI Workstation
 
