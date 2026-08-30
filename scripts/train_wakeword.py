@@ -35,9 +35,9 @@ from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "models" / "openwakeword"))
 
 from piper import PiperVoice, SynthesisConfig
+import openwakeword
 from openwakeword.utils import AudioFeatures
 import openwakeword.utils as oww_utils
 
@@ -136,6 +136,8 @@ class OWWTrainer:
             input_names=["input"],
             output_names=["ok_dann"],
             opset_version=13,
+            dynamo=False,  # legacy exporter: single self-contained .onnx file,
+                            # no onnxscript dependency, no external-data sidecar
         )
         print(f"ONNX model exported → {output_path}", flush=True)
 
@@ -143,10 +145,20 @@ class OWWTrainer:
 
 REPO_ROOT    = Path(__file__).resolve().parents[1]
 VOICE_MODEL  = REPO_ROOT / "models" / "pieper" / "en_GB-northern_english_male-medium.onnx"
-POSITIVE_DIR     = REPO_ROOT / "training" / "positive"
-ADVERSARIAL_DIR  = REPO_ROOT / "training" / "adversarial"
+POSITIVE_DIR       = REPO_ROOT / "training" / "positive"
+POSITIVE_REAL_DIR  = REPO_ROOT / "training" / "positive_real"  # real recordings, see scripts/record_wakeword_samples.py
+ADVERSARIAL_DIR    = REPO_ROOT / "training" / "adversarial"
+
+# Real recordings are far more valuable per-clip than synthetic ones (they're
+# what closes the synthetic-voice-only domain gap), but there are far fewer
+# of them — repeat each one this many times so they carry real weight
+# against the ~3000 synthetic positives instead of being drowned out.
+REAL_OVERSAMPLE = 50
 OUT_MODEL    = REPO_ROOT / "models" / "ok_dann.onnx"
-OWW_MODELS_DIR = REPO_ROOT / "models" / "openwakeword" / "openwakeword" / "resources" / "models"
+# models/openwakeword is a git submodule reference with no .gitmodules entry
+# (never populated) — use the pip-installed openwakeword package's own
+# resources dir instead, which is also where AudioFeatures() looks by default.
+OWW_MODELS_DIR = Path(openwakeword.__file__).resolve().parent / "resources" / "models"
 
 PIPER_RATE    = 22050
 TARGET_RATE   = 16000
@@ -281,7 +293,20 @@ def main() -> None:
     # 2. Load generated clips
     print("Loading positive clips…", flush=True)
     pos_clips = load_wavs_to_array(POSITIVE_DIR)
-    print(f"  {len(pos_clips)} positive clips loaded", flush=True)
+    print(f"  {len(pos_clips)} synthetic positive clips loaded", flush=True)
+
+    if POSITIVE_REAL_DIR.exists() and list(POSITIVE_REAL_DIR.glob("*.wav")):
+        real_clips = load_wavs_to_array(POSITIVE_REAL_DIR)
+        print(f"  {len(real_clips)} real positive clips loaded — oversampling x{REAL_OVERSAMPLE}", flush=True)
+        real_clips = np.tile(real_clips, (REAL_OVERSAMPLE, 1))
+        pos_clips = np.concatenate([pos_clips, real_clips], axis=0)
+        print(f"  {len(pos_clips)} total positive clips after oversampling", flush=True)
+    else:
+        print(
+            "  no real recordings found in training/positive_real/ — "
+            "run scripts/record_wakeword_samples.py for much better real-voice accuracy",
+            flush=True,
+        )
 
     adv_clips = load_wavs_to_array(ADVERSARIAL_DIR)
     print(f"  {len(adv_clips)} adversarial clips loaded", flush=True)

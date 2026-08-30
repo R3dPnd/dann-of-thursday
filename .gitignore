@@ -16,8 +16,12 @@ deploy/cloudflared/config.yml
 # Ignore wake-word model binaries
 models/*.tflite
 models/*.onnx
+models/*.onnx.data
 models/*.bin
 models/*.npz
+
+# Real voice recordings used to train the wake word — personal, keep local only
+training/positive_real/
 
 # Python artifacts
 __pycache__/

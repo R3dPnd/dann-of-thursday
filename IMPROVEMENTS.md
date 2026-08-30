@@ -501,6 +501,69 @@ The `open_claude_code` MCP tool opens a new Terminal window with `claude` runnin
 
 **Fix:** Reads `SECRET_KEY` from settings and checks the `X-API-Key` header. Skips enforcement only when `DEBUG=True` or the key is still the placeholder default. **Status:** Fixed in `app/core/dependencies.py`.
 
+### 8.12 Wake Word Model Never Recognized Real Speech
+
+`models/ok_dann.onnx` (openWakeWord) was trained entirely on 3000 clips synthesized from one Piper TTS voice, with no real human recordings. Live scoring against actual speech came back at 0.0005 (essentially zero) against a 0.7 threshold — not a marginal miss, the model had no signal for a real speaker at all.
+
+**Fix:** Added `scripts/record_wakeword_samples.py` to record real "ok Dann" clips (interactive `input()`-gated mode, plus a fixed-cadence `--auto` mode for hands-free batch recording). `scripts/train_wakeword.py` now loads `training/positive_real/` if present and oversamples each real clip (`REAL_OVERSAMPLE`, tuned from 20x to 50x) against the synthetic set. 40 real clips at 50x oversampling brought the live score from 0.0005 to 0.9969, confirmed working end-to-end (wake detected, correct STT transcription, LLM routing, spoken response) in a live run. **Status:** Fixed.
+
+### 8.13 Wake Word Training Pipeline Was Broken by Environment Drift (Multiple Causes)
+
+Running `scripts/train_wakeword.py` failed three separate ways before producing a model, none related to the training logic itself:
+- `OWW_MODELS_DIR` pointed at `models/openwakeword/openwakeword/resources/models` — a git submodule reference (`160000` gitlink) with no corresponding `.gitmodules` entry, so it was never actually populated. `AudioFeatures()` defaults to the *installed* `openwakeword` package's own resources dir, which didn't match.
+- `torch.onnx.export`'s new default (`dynamo=True` as of the installed torch 2.13) requires `onnxscript`, which isn't installed; explicitly passing `dynamo=False` to use the legacy exporter avoids that dependency but needs the separate `onnx` package, also not installed.
+- Installing `onnx` pulled in `numpy==2.5.2`, upgrading past the pinned `numpy==1.26.4` in `requirements.txt`.
+
+**Fix:** `OWW_MODELS_DIR` now resolves dynamically via `Path(openwakeword.__file__).resolve().parent / "resources" / "models"`. `torch.onnx.export(..., dynamo=False)` plus `onnx` added to `requirements.txt`. `numpy` pin bumped to `2.5.2` after verifying `faster-whisper`/`sounddevice`/`soundfile`/`onnxruntime`/`openwakeword`/`piper`/`pvporcupine` all still import correctly under it. **Status:** Fixed.
+
+### 8.14 MCP `command: python` Silently Broken (No Bare `python` on PATH)
+
+`config.yaml`'s `mcp.servers` entries used `command: python`, but this machine's PATH has no bare `python` — only `python3` and `.venv/bin/python`. This predates the module-system work in this session; the original single-server (`claude-code`) setup was already non-functional before any of today's changes.
+
+**Fix:** All `mcp.servers` entries in `config.yaml` and `config.example.yaml` now use `command: .venv/bin/python`. **Status:** Fixed.
+
+### 8.15 `mcp` Package 2.x Removed `FastMCP`, Breaking Every MCP Server
+
+`requirements.txt` pinned `mcp>=1.0.0` with no ceiling. A routine `pip install -r requirements.txt` resolved to `mcp==2.1.0`, which restructured the package and dropped `mcp.server.fastmcp.FastMCP` entirely — breaking `claude_code_server.py` (pre-existing) and every new module server built on the same base.
+
+**Fix:** Pinned `mcp==1.29.1` in `requirements.txt`, confirmed to have both the server-side `FastMCP` API and the client-side `ClientSession`/`stdio_client` API this codebase uses. **Status:** Fixed.
+
+### 8.16 anyio Cancel-Scope Crash on Cross-Task MCP Server Disconnect
+
+Related to but distinct from 8.3 (Ctrl+C shutdown): disconnecting a single on-demand MCP module mid-session (`disable_module`) crashed with the same `RuntimeError: Attempted to exit cancel scope in a different task than it was entered in`. `stdio_client`'s cancel scope (anyio) must be entered and exited in the same asyncio Task; the original `MCPManager` opened each server's `stdio_client`/`ClientSession` in one `_run()` call (one Task) and closed it in a later, separate `_run()` call (a different Task on the same loop/thread), which anyio forbids regardless of thread.
+
+**Fix:** Each connected server now gets one long-lived owner task (`_server_owner_task`) that opens its own `stdio_client`/`ClientSession` and only tears them down when its own `asyncio.Event` is set from outside — connect/disconnect are signals to that task, not separate enter/exit calls from different tasks. Verified clean connect → disconnect → reconnect cycles with no exceptions. **Status:** Fixed in `src/mcp_client.py`. (8.3's `except Exception: pass` band-aid around final shutdown teardown is superseded by this for the on-demand path, but is still in place as a defensive fallback in `stop()`.)
+
+### 8.17 Porcupine `.ppn` Model Was the Wrong Platform's File
+
+`config.yaml` pointed Porcupine at `models/ok_dann.ppn`, which failed with `PorcupineInvalidArgumentError: Keyword file (.ppn) file has incorrect format or belongs to a different platform`. A second file, `models/mac_ok_dann.ppn`, was already present — `ok_dann.ppn` was Windows-trained (this repo has Windows path history throughout, e.g. `C:/Git/...` project paths), `mac_ok_dann.ppn` is the macOS one.
+
+**Fix:** N/A — the project moved to openWakeWord as primary (8.12) rather than continuing with Porcupine, since Porcupine also requires a Picovoice AccessKey (the previous one leaked in git history — see `schedule-setup.md`/README security notes) and has recurring platform-file confusion. `config.example.yaml` documents the correct `.ppn` file selection as a comment for anyone who wants Porcupine instead. **Status:** Open / not applicable (superseded by 8.12's fix).
+
+### 8.18 No Voice Command Actually Stops the Process
+
+`src/orchestrator.py`'s `run()` loop (`while self._running: ...`) only exits on `KeyboardInterrupt` (Ctrl+C). Saying "goodbye Dann" (or any goodbye phrase) only ends the current conversation session and returns to idle wake-word listening — there's no spoken command that sets `self._running = False` and actually stops the program. Observed live: a user tried "goodbye Dann" expecting a full shutdown and it just kept listening.
+
+**Fix:** Not yet fixed. Would need a distinct phrase (e.g. "shut down Dann" / "stop listening") routed to actually break the `run()` loop, separate from the existing per-session goodbye handling. **Status:** Open.
+
+### 8.19 Router Over-Calls `list_modules` / `enable_module`
+
+Since adding the optional-module meta-tools (8.12 workstream), the local model (llama3.2) called `list_modules` for turns where it wasn't relevant — a bare "Okay, Dan" with no real request, and a self-referential question about `max_tokens` config. Neither needed a module lookup.
+
+**Fix:** Not yet fixed. Likely needs tighter guidance in `ollama.system_prompt`'s "OPTIONAL MODULES" section about when *not* to call `enable_module`/`list_modules` (e.g. only when the request clearly needs calendar/notes/system-control tools). **Status:** Open.
+
+### 8.20 Tool-Result Responses Truncated by `max_tokens: 80`
+
+`ollama.max_tokens: 80` is tuned for short spoken answers, but a response that needs to enumerate a tool result (e.g. naming 3 module names + descriptions after `list_modules`) can need more than that, and gets cut off mid-sentence with no indication to the user that it was truncated.
+
+**Fix:** Not yet fixed. Consider a higher `max_tokens` specifically for turns that follow a tool call, or trimming what tool results return so they fit in ~80 tokens regardless. **Status:** Open.
+
+### 8.21 §8.2's JSON-Artifact Fix Doesn't Catch Prose-About-JSON
+
+`_is_json_artifact()` (src/orchestrator.py) only flags responses that are themselves valid, parseable JSON (`json.loads(stripped)` succeeds). Observed live: pushed on an incorrect answer, llama3.2 responded "Here is the correct JSON for a function call with its proper arguments that best answers the given prompt:" and stopped there (likely `max_tokens` truncation, see 8.20) — prose *narrating* an intent to produce JSON, not JSON itself, so it passed straight through to TTS unfiltered. §8.2's fix and status ("Fixed") should be read as covering only the pure-JSON-response case, not this narrower prose variant.
+
+**Fix:** Not yet fixed. Could extend `_is_json_artifact` (or add a second check) to flag responses containing tool-calling scaffold language (e.g. "here is the JSON", "function call") even when they don't parse as JSON outright. **Status:** Open.
+
 ---
 
 ## Summary Table
@@ -548,6 +611,16 @@ The `open_claude_code` MCP tool opens a new Terminal window with `claude` runnin
 | 8.9 | MCP Service | Tool list hardcoded, not from ToolService | Medium | Low — **Fixed** |
 | 8.10 | Health | /ready always returned "ready" | Medium | Low — **Fixed** |
 | 8.11 | Security | API key check always passed | High | Low — **Fixed** |
+| 8.12 | Voice Pipeline | Wake word never recognized real speech (synthetic-only training) | Critical | Medium — **Fixed** |
+| 8.13 | Voice Pipeline | Wake word training pipeline broken by env drift (3 causes) | High | Medium — **Fixed** |
+| 8.14 | MCP | `command: python` not on PATH, MCP silently non-functional | Critical | Low — **Fixed** |
+| 8.15 | MCP | `mcp` 2.x removed FastMCP, broke every MCP server | Critical | Low — **Fixed** |
+| 8.16 | MCP | anyio cancel-scope crash on on-demand module disconnect | High | Medium — **Fixed** |
+| 8.17 | Voice Pipeline | Porcupine `.ppn` was wrong platform's file | Medium | N/A — superseded |
+| 8.18 | Voice Pipeline | No voice command actually stops the process | Medium | Low — Open |
+| 8.19 | Voice Pipeline | Router over-calls list_modules/enable_module | Low | Low — Open |
+| 8.20 | Voice Pipeline | Tool-result responses truncated by max_tokens: 80 | Low | Low — Open |
+| 8.21 | Voice Pipeline | JSON-artifact filter misses prose-about-JSON | Medium | Low — Open |
 
 ---
 

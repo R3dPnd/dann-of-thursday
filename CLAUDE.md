@@ -19,8 +19,8 @@ config.yaml   Runtime config (audio, STT, TTS, wake word, projects)
 
 | What | Command |
 |------|---------|
-| Voice agent (full) | `.venv/Scripts/python.exe -m src.main` |
-| Backend only (no mic) | `NO_VOICE=1 .venv/Scripts/uvicorn.exe app.main:app --host 0.0.0.0 --port 8000` |
+| Voice agent (full) | `.venv/bin/python -m src.main` |
+| Backend only (no mic) | `NO_VOICE=1 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000` |
 | UI dev server | `cd ui && npm run dev` (port 3000) |
 
 ## Architecture
@@ -43,12 +43,32 @@ ui/src/                  React dashboard (port 3000 dev / served from FastAPI pr
 
 ## Python venv
 
-Always use `.venv/Scripts/python.exe` / `.venv/Scripts/pip.exe` on Windows.
+Always use `.venv/bin/python` / `.venv/bin/pip` (macOS). `requirements.txt` needs Python 3.10+ —
+`scripts/setup.sh` checks for this and installs a newer interpreter via Homebrew if the system
+`python3` is too old. `mcp` is pinned to `1.29.1` — 2.x removed `mcp.server.fastmcp.FastMCP`, which
+every MCP server module here uses.
 
 ## MCP integration
 
-`src/mcp_client.py` + `src/mcp_servers/claude_code_server.py` — Dann can invoke Claude Code via MCP.
-Sessions with `SessionMode.CODE` bypass Ollama and route to Claude Code directly.
+`src/mcp_client.py`'s `MCPManager` connects to the MCP servers listed under `mcp.servers` in
+`config.yaml` — each one a separate module (own process, own dependencies):
+
+- `src/mcp_servers/claude_code_server.py` (`projects`, `always_on: true`) — project discovery
+  and the Claude Code bridge. Sessions with `SessionMode.CODE` bypass Ollama and route to
+  Claude Code directly.
+- `src/mcp_servers/schedule_server.py` (`schedule`) — Google Calendar (needs one-time OAuth
+  setup, see `schedule-setup.md`).
+- `src/mcp_servers/notes_server.py` (`notes`) — local notes/reminders, `~/.dann/notes.json`.
+- `src/mcp_servers/system_server.py` (`system`) — volume/open-app/lock-screen via `osascript`.
+
+Modules default to `always_on: false` — registered but not started. `MCPManager` exposes three
+meta-tools (`list_modules`, `enable_module`, `disable_module`) so the LLM starts a module's
+process only when a turn actually needs it, keeping both the tool schema sent to Ollama and the
+process count small as more modules get added. `always_on: true` is the escape hatch for a
+module that should just always be connected (edit config, restart).
+
+Personal per-machine module data (OAuth tokens, notes) lives under `~/.dann/`, not in the repo —
+see `src/mcp_servers/_store.py`.
 
 ## Config
 
