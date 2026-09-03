@@ -63,6 +63,7 @@ def generate_response_streaming(
         "model": model,
         "messages": messages,
         "stream": True,
+        "think": False,  # suppress hybrid-thinking models' <think> pass; ignored by models without one
         "options": {
             "temperature": temperature,
             "num_predict": max_tokens,
@@ -127,6 +128,7 @@ def generate_response(
             "model": model,
             "messages": messages,
             "stream": False,
+            "think": False,  # suppress hybrid-thinking models' <think> pass; ignored by models without one
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,

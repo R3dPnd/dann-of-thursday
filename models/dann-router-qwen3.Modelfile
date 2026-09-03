@@ -1,0 +1,27 @@
+# Experimental Qwen3-based variant of Dann's routing brain, for benchmarking
+# against models/dann-router.Modelfile (qwen2.5:7b-instruct). See that file
+# for what a Modelfile can/can't control here — same rules apply (per-request
+# system_prompt/temperature/max_tokens always win; num_ctx/top_p/repeat_penalty
+# /num_predict are only set here).
+#
+# Qwen3 has a hybrid "thinking" mode that emits <think>...</think> reasoning
+# before answering — adds latency and breaks the "1-2 sentence, no markdown"
+# voice-reply contract. Ollama toggles it via a per-request "think" field
+# (not a Modelfile PARAMETER), which src/llm/ollama.py now sends as
+# "think": False on every request — a no-op for models without a thinking
+# mode, so this is safe regardless of which model config.yaml points at.
+
+FROM qwen3:8b
+
+PARAMETER num_ctx 8192
+PARAMETER top_p 0.8
+PARAMETER repeat_penalty 1.1
+PARAMETER num_predict 200
+
+SYSTEM """
+You are Dann, a voice/text assistant with a routing brain: for every
+request, decide whether to answer directly or call a tool, based on the
+AGENTS list you're given each turn. Never call a tool for conversational
+filler. After a tool call, speak the result naturally in 1-2 sentences and
+stop. Never use markdown, lists, or code formatting in your own responses.
+"""
