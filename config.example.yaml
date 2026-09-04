@@ -38,41 +38,24 @@ stt:
 
 ollama:
   base_url: http://localhost:11434
-  model: llama3.2
+  model: dann-router   # custom model built from qwen2.5:7b-instruct — see
+                       # models/dann-router.Modelfile and scripts/build_router_model.sh.
+                       # Not pulled automatically; run the script once after setup,
+                       # or set this back to llama3.2/qwen2.5:7b-instruct directly.
   system_prompt: |
-    You are a voice assistant with a routing brain. You decide what to handle locally and what to delegate.
-
-    LOCAL (answer yourself, no tools):
-    - Greetings, small talk, confirmations ("yes", "thanks", "sounds good")
-    - Simple factual questions you are confident about
-    - Anything that needs a one-sentence answer
-
-    ROUTE TO ask_claude:
-    - Complex reasoning, analysis, or explanation
-    - Questions about history, science, philosophy, current events, or broad knowledge
-    - Creative tasks (write something, explain a concept deeply, give advice)
-    - Anything where you are unsure or the question deserves a thorough answer
-
-    ROUTE TO ask_claude_code:
-    - Questions about a specific project ("summarise X", "what does Y do", "what tests are missing")
-
-    ROUTE TO open_claude_code:
-    - User explicitly wants to open an interactive coding session ("open Claude Code in X")
-
-    ROUTE TO list_projects:
-    - User asks what projects are available
-
-    OPTIONAL MODULES (schedule, notes, system, etc.):
-    - If the user's request needs a tool you don't see yet (calendar, notes,
-      volume/app control), call enable_module with the module name first —
-      its real tools become available right after. Use list_modules if
-      you're unsure what's available.
+    You are a voice assistant with a routing brain. For every request, pick
+    the single best-fit agent from the AGENTS list (appended below at
+    startup from config.yaml's `agents:` section) and either answer
+    yourself (the "local" agent) or call that agent's tool(s).
 
     Rules:
     - Never call a tool for conversational filler.
     - After any tool call, speak the result naturally in 1-2 sentences and stop.
     - Never call the same tool twice in one turn.
     - Never use markdown, lists, or code formatting in your own responses.
+    - Some agents below live in an "optional module" — call enable_module
+      with the module name first if you don't see its tools yet. Use
+      list_modules if you're unsure what's available or active.
   temperature: 0.7
   max_tokens: 80
 
@@ -83,6 +66,78 @@ tts:
   voice_model: models/piper/en_US-lessac-medium
   speed: 1.0
 
+agents:
+  # Structured routing targets for Dann's brain — compiled at runtime (see
+  # src/agents_config.py) into the "AGENTS" section appended to
+  # ollama.system_prompt above, and shared by both voice (src/orchestrator.py)
+  # and text chat (app/services/chat_service.py). Add a new routing target
+  # here instead of hand-editing prompt prose. `tools` lists the MCP tool
+  # name(s) to call for that agent; omit it for "local", which means
+  # "answer yourself, no tool call." Set enabled: false to remove an agent
+  # from routing without deleting it.
+  - name: local
+    description: >
+      Greetings, small talk, confirmations ("yes", "thanks", "sounds
+      good"), and simple facts you're confident about — anything that
+      needs one sentence and no research.
+    enabled: true
+
+  - name: claude_code
+    tools: [list_projects, open_claude_code, ask_claude_code]
+    description: >
+      Project-aware work on a specific local git repo — summarize/explain
+      code, check test coverage, or open an interactive session. Needs a
+      project name; use list_projects if unsure what's available.
+    enabled: true
+
+  - name: claude_reasoning
+    tools: [ask_claude]
+    description: >
+      General reasoning, analysis, or creative writing that doesn't need a
+      project — broader or deeper than the local model should attempt.
+      Runs via the claude CLI (your subscription), not a billed API. Pass
+      depth="fast" for a quick/cheap answer, depth="deep" (default) for
+      thorough reasoning.
+    enabled: true
+
+  - name: web_research
+    tools: [web_search]
+    description: >
+      Anything needing current information — news, prices, recent
+      releases, or facts likely past the local model's knowledge cutoff.
+      Runs via the claude CLI's built-in web search, not a billed API.
+    enabled: true
+
+  - name: schedule
+    description: "Calendar — view, create, and search events. Optional module — enable_module first."
+    enabled: true
+
+  - name: notes
+    description: "Quick notes and reminders, stored locally. Optional module — enable_module first."
+    enabled: true
+
+  - name: gardening
+    description: "Your garden log — what you planted, harvests, and care notes, stored locally. General gardening advice doesn't need this tool, only questions about your own garden. Optional module — enable_module first."
+    enabled: true
+
+  - name: bjj
+    description: "Your BJJ training log — sessions, techniques, and notes, stored locally. General BJJ questions (technique how-tos, rules) don't need this tool, only questions about your own training. Optional module — enable_module first."
+    enabled: true
+
+  - name: devteam
+    description: >
+      Launches a real, unsupervised multi-phase Claude Code pipeline
+      (research, plan, implement, test, devops) against a project, running
+      in the background for minutes at a time. Only use for an explicit,
+      substantial "build/implement X" request — never for questions,
+      explanations, or quick lookups (use claude_code for those). Optional
+      module — enable_module first.
+    enabled: true
+
+  - name: system
+    description: "Local machine control — volume, opening apps, locking the screen. Optional module — enable_module first."
+    enabled: true
+
 mcp:
   servers:
     # always_on: true  -> connected at startup, stays up for the session.
@@ -91,7 +146,7 @@ mcp:
     - name: projects
       command: .venv/bin/python
       args: ["-m", "src.mcp_servers.claude_code_server"]
-      description: "Project discovery and Claude Code sessions"
+      description: "Project discovery, Claude Code sessions, and web search — all via the claude CLI"
       always_on: true
 
     - name: schedule
@@ -104,6 +159,24 @@ mcp:
       command: .venv/bin/python
       args: ["-m", "src.mcp_servers.notes_server"]
       description: "Quick notes and reminders, stored locally"
+      always_on: false
+
+    - name: gardening
+      command: .venv/bin/python
+      args: ["-m", "src.mcp_servers.gardening_server"]
+      description: "Garden log — plantings, harvests, and care notes, stored locally"
+      always_on: false
+
+    - name: bjj
+      command: .venv/bin/python
+      args: ["-m", "src.mcp_servers.bjj_server"]
+      description: "BJJ training log — sessions, techniques, and notes, stored locally"
+      always_on: false
+
+    - name: devteam
+      command: .venv/bin/python
+      args: ["-m", "src.mcp_servers.devteam_server"]
+      description: "Background multi-phase Claude Code pipelines (research/plan/implement/test/devops)"
       always_on: false
 
     - name: system
