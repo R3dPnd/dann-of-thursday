@@ -123,7 +123,7 @@ porcupine.delete()
 # macOS/Linux:
 source .venv/bin/activate
 
-python wakeword_test.py --model models/ok_dann.ppn --access-key YOUR_ACCESS_KEY
+python scripts/wakeword/manual_mic_test.py  # reads wake_word.access_key/model_path from config.yaml
 ```
 - Confirm "wake_detected" prints reliably; adjust sensitivity/debounce, then integrate.
 

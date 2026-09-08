@@ -17,7 +17,7 @@ an actual Claude Code session — so "ok Dann, open Claude Code in \<project\>"
 hands off a spoken conversation to a real coding agent.
 
 For a full breakdown of languages, libraries, and *why* each one was
-chosen, see [TECH_SPEC.md](TECH_SPEC.md). This section covers how the
+chosen, see [docs/tech-spec.md](docs/tech-spec.md). This section covers how the
 pieces fit together at runtime.
 
 ## How it works
@@ -30,33 +30,34 @@ pieces fit together at runtime.
              openWakeWord           whisper  (local)         local
 ```
 
-`src/orchestrator.py` drives this loop. On each turn:
+`voice/orchestrator.py` drives this loop. On each turn:
 
-1. The wake word detector (`src/wakeword/`) listens to a live mic stream
+1. The wake word detector (`voice/wakeword/`) listens to a live mic stream
    and only wakes the rest of the pipeline once it hears "ok Dann" —
    everything downstream is comparatively expensive, so this gate matters.
-2. `src/audio/capture.py` records until silence (or a max duration), then
-   `src/stt/whisper.py` (faster-whisper) transcribes it locally.
-3. The transcript goes to `src/llm/ollama.py`, which calls a local Ollama
+2. `voice/audio/capture.py` records until silence (or a max duration), then
+   `voice/stt/whisper.py` (faster-whisper) transcribes it locally.
+3. The transcript goes to `voice/llm/ollama.py`, which calls a local Ollama
    model running under a **routing system prompt** (`config.yaml`'s
-   `ollama.system_prompt`). The model decides per-turn whether to answer
-   directly, or call one of four tools:
+   `ollama.system_prompt`, extended at runtime with the `agents:` list —
+   see `shared/agents_config.py`). The model decides per-turn whether to
+   answer directly, or call a tool for the picked agent, e.g.:
    - `ask_claude` — hands complex/broad questions to the Claude API instead
      of the local model.
    - `ask_claude_code` / `open_claude_code` — routes project-specific
      questions, or an explicit request to start coding, to Claude Code via
-     MCP (`src/mcp_client.py`, `src/mcp_servers/claude_code_server.py`).
+     MCP (`integrations/client.py`, `integrations/servers/claude_code_server.py`).
    - `list_projects` — reads the `projects` list out of `config.yaml`.
-4. The response text is synthesized by `src/tts/piper.py` and played back
-   through `src/audio/playback.py`.
+4. The response text is synthesized by `voice/tts/piper.py` and played back
+   through `voice/audio/playback.py`.
 
-Every step emits an event onto `src/event_bus.py` — that's what the
+Every step emits an event onto `voice/event_bus.py` — that's what the
 dashboard subscribes to, and what makes "watch Dann think" possible.
 
 ### Code mode
 
 Saying something like "open Claude Code in \<project\>" flips the session
-into `SessionMode.CODE` (see `src/orchestrator.py`): Ollama routing is
+into `SessionMode.CODE` (see `voice/orchestrator.py`): Ollama routing is
 bypassed entirely, conversation history resets, and every subsequent turn
 goes straight to Claude Code over MCP until you say a goodbye phrase or ask
 to exit code mode. This is the mechanism behind treating Dann as a voice
@@ -72,18 +73,21 @@ Three services subscribe to the event bus and persist what they see:
 `history_service` (conversation history) — all exposed over REST + a
 WebSocket event stream to the `ui/` React app, which renders live pipeline
 state, project panels, terminal output, and metrics. See
-[UI_SPEC.md](UI_SPEC.md) for the dashboard's detailed spec.
+[docs/ui-spec.md](docs/ui-spec.md) for the dashboard's detailed spec.
 
 ## Project layout
 
 ```
-src/          Voice pipeline (wake word → STT → LLM → TTS)
-app/          FastAPI backend + API (serves dashboard state, REST, WebSocket)
-ui/           React + Tailwind dashboard (Vite dev server / optional Electron)
-models/       Wake word models, Piper voice, openwakeword submodule
-scripts/      Guided setup (scripts/setup.sh) and workstation bootstrap
-deploy/       Cloudflare Tunnel + launchd templates for remote access
-config.yaml   Runtime config (audio, STT, TTS, wake word, Ollama, projects)
+voice/          Voice pipeline (wake word → STT → LLM → TTS)
+integrations/   MCP client + tool-server modules (projects, schedule, notes, gardening, bjj, devteam, system)
+shared/         Cross-cutting code used by both voice/ and app/ (agent routing config, restart)
+app/            FastAPI backend + API (serves dashboard state, REST, WebSocket)
+ui/             React + Tailwind dashboard (Vite dev server / optional Electron)
+models/         Wake word models, Piper voice, openwakeword submodule
+scripts/        Guided setup (scripts/setup.sh), workstation bootstrap, wake-word tooling (scripts/wakeword/)
+deploy/         Cloudflare Tunnel + launchd templates for remote access
+docs/           Design/tech-spec/UI-spec docs and setup notes
+config.yaml     Runtime config (audio, STT, TTS, wake word, Ollama, agents, MCP servers)
 ```
 
 ## Setup (macOS)
@@ -108,7 +112,7 @@ cp config.example.yaml config.yaml
    - Get a free AccessKey from https://console.picovoice.ai/
    - Create custom wake word "ok Dann" in Picovoice Console
    - Download the `.ppn` model file to `models/ok_dann.ppn`
-   - Set `wake_word.access_key` in `config.yaml` (see [wake-word.md](wake-word.md))
+   - Set `wake_word.access_key` in `config.yaml` (see [docs/wake-word.md](docs/wake-word.md))
 2. **Ollama**: Install and run `ollama serve`, pull a model (e.g. `ollama pull llama3.2`).
 3. **Piper TTS**: Included via `pip install piper-tts` (works on M1). Download a voice from [Piper voices](https://github.com/rhasspy/piper/releases) (e.g. `en_US-lessac-medium.onnx`), place in `models/piper/`, set `tts.voice_model` in config.
 
@@ -118,7 +122,7 @@ Edit `config.yaml` for your paths and preferences.
 
 ```bash
 source .venv/bin/activate
-python -m src.main
+python -m voice.main
 ```
 
 Say "ok Dann" then ask your question.

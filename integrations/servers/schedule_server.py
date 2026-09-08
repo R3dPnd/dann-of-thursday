@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MCP server for Google Calendar — Dann's schedule module.
 
-One-time setup required before this module works — see schedule-setup.md:
+One-time setup required before this module works — see docs/schedule-setup.md:
   1. Create a Google Cloud project, enable the Calendar API.
   2. Create an OAuth client ID (type: Desktop app), download the JSON.
   3. Save it as ~/.dann/google_credentials.json.
@@ -39,7 +39,7 @@ def _get_service():
     if not _CREDENTIALS_FILE.exists():
         raise RuntimeError(
             f"No Google OAuth credentials at {_CREDENTIALS_FILE}. "
-            "See schedule-setup.md to set up the schedule module."
+            "See docs/schedule-setup.md to set up the schedule module."
         )
 
     from google.auth.transport.requests import Request

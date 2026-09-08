@@ -19,8 +19,8 @@ wake_word:
   # openWakeWord: fully offline, no account. Built-in phrases (hey_jarvis,
   # alexa, hey_mycroft, ...) work immediately with no setup — just set
   # model to one of those names below instead of a .onnx path. For a custom
-  # "ok Dann" phrase: generate training clips (scripts/generate_wakeword_samples.py)
-  # then train (scripts/train_wakeword.py), ~1 min on CPU with clips already made.
+  # "ok Dann" phrase: generate training clips (scripts/wakeword/generate_wakeword_samples.py)
+  # then train (scripts/wakeword/train_wakeword.py), ~1 min on CPU with clips already made.
   engine: openwakeword
   model: models/ok_dann.onnx   # or a built-in name, e.g. hey_jarvis
   threshold: 0.7
@@ -44,7 +44,7 @@ stt:
 ollama:
   base_url: http://localhost:11434
   model: dann-router   # custom model built from qwen2.5:7b-instruct — see
-                       # models/dann-router.Modelfile and scripts/build_router_model.sh.
+                       # models/dann-router.Modelfile and scripts/wakeword/build_router_model.sh.
                        # Not pulled automatically; run the script once after setup,
                        # or set this back to llama3.2/qwen2.5:7b-instruct directly.
   system_prompt: |
@@ -157,7 +157,7 @@ mcp:
     - name: schedule
       command: .venv/bin/python
       args: ["-m", "integrations.servers.schedule_server"]
-      description: "Google Calendar — view, create, and search events (needs one-time setup, see schedule-setup.md)"
+      description: "Google Calendar — view, create, and search events (needs one-time setup, see docs/schedule-setup.md)"
       always_on: false
 
     - name: notes

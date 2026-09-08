@@ -15,7 +15,7 @@ Setup:
     #   - Set wake_word.model_path to models/ok_dann.ppn
     #   - Ollama model, Piper voice path
     # Install Piper: https://github.com/rhasspy/piper/releases
-    # Create wake word model via Picovoice Console (see wake-word.md)
+    # Create wake word model via Picovoice Console (see docs/wake-word.md)
 
 Run:
     python -m voice.main

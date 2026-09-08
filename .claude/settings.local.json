@@ -161,7 +161,7 @@
       "Bash(ollama create *)",
       "Bash(timeout 60 claude -p --allowedTools WebSearch \"Search the web for: what is 2+2 \\(just testing tool access\\)\" 2>&1)",
       "Bash(claude *)",
-      "Bash(./scripts/build_router_model.sh)",
+      "Bash(./scripts/wakeword/build_router_model.sh)",
       "Bash(ollama run *)",
       "Bash(ollama rm *)",
       "Bash(ollama --version)",
