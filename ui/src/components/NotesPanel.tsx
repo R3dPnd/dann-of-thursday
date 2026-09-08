@@ -43,7 +43,7 @@ export function NotesPanel({
     return (
       <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
         <p className="text-sm">No notes repositories found.</p>
-        <p className="mt-1 text-xs">Add entries under "notes" in config.json.</p>
+        <p className="mt-1 text-xs">Add entries under "notes" in config.yaml.</p>
       </div>
     )
   }

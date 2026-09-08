@@ -15,20 +15,6 @@ class StatusEnum(str, Enum):
     RUNNING = "running"
 
 
-class MCPRequest(BaseModel):
-    """MCP request model"""
-    method: str = Field(..., description="MCP method name")
-    params: Optional[Dict[str, Any]] = Field(default=None, description="Method parameters")
-    id: Optional[str] = Field(default=None, description="Request ID")
-
-
-class MCPResponse(BaseModel):
-    """MCP response model"""
-    result: Optional[Dict[str, Any]] = Field(default=None, description="Response result")
-    error: Optional[Dict[str, Any]] = Field(default=None, description="Error information")
-    id: Optional[str] = Field(default=None, description="Request ID")
-
-
 class ToolExecutionRequest(BaseModel):
     """Tool execution request model"""
     tool_name: str = Field(..., description="Name of the tool to execute")
