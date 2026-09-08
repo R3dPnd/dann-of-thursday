@@ -53,7 +53,7 @@ class TestWarmup:
         with patch("voice.stt.whisper._get_model") as mock_get:
             from voice.stt.whisper import warmup
             warmup()
-        mock_get.assert_called_once_with("base", "cpu", "int8")
+        mock_get.assert_called_once_with("small", "auto", "int8")
 
 
 # ── transcribe_audio ──────────────────────────────────────────────────────────
@@ -121,4 +121,4 @@ class TestTranscribeAudio:
             from voice.stt.whisper import transcribe_audio
             transcribe_audio(audio_file, language="fr")
 
-        mock_model.transcribe.assert_called_once_with(str(audio_file), language="fr")
+        mock_model.transcribe.assert_called_once_with(str(audio_file), language="fr", vad_filter=True)
