@@ -3,13 +3,13 @@
 import pytest
 from unittest.mock import patch
 
-from src.orchestrator import Orchestrator, SessionMode
+from voice.orchestrator import Orchestrator, SessionMode
 
 
 @pytest.fixture()
 def orch(minimal_config):
     """Orchestrator instance with config injected, no real hardware initialised."""
-    with patch("src.orchestrator.load_config", return_value=minimal_config):
+    with patch("voice.orchestrator.load_config", return_value=minimal_config):
         o = Orchestrator()
     return o
 

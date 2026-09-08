@@ -33,12 +33,12 @@ def _start_orchestrator() -> None:
     """Initialise and run the voice orchestrator. Runs in a daemon thread."""
     global orchestrator
     try:
-        from src.orchestrator import Orchestrator
+        from voice.orchestrator import Orchestrator
         config_path = Path(__file__).resolve().parent.parent / "config.yaml"
         orchestrator = Orchestrator(config_path)
         orchestrator.run()
     except Exception as exc:
-        from src.event_bus import bus
+        from voice.event_bus import bus
         import traceback
         bus.emit("error", {
             "module": "orchestrator",
@@ -84,7 +84,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    from src.event_bus import bus
+    from voice.event_bus import bus
     from app.services import history_service, log_service, metrics_service
     bus.subscribe(metrics_service.record_metric)
     bus.subscribe(log_service.record_event)
@@ -95,8 +95,8 @@ async def startup_event() -> None:
     # orchestrator. Idempotent: if voice starts afterwards it reuses this
     # same instance rather than starting a second one.
     try:
-        from src.config import load_config
-        from src.mcp_client import get_shared_manager
+        from voice.config import load_config
+        from integrations.client import get_shared_manager
         config_path = Path(__file__).resolve().parent.parent / "config.yaml"
         cfg = load_config(config_path)
         mcp_servers = (cfg.get("mcp") or {}).get("servers") or []
@@ -120,7 +120,7 @@ async def shutdown_event() -> None:
     if orchestrator is not None:
         orchestrator.stop()  # also stops the shared MCP manager
     else:
-        from src.mcp_client import get_shared_manager
+        from integrations.client import get_shared_manager
         mgr = get_shared_manager()
         if mgr.started:
             mgr.stop()

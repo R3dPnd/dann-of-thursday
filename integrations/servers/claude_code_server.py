@@ -27,7 +27,7 @@ mcp = FastMCP("claude-code")
 # pool (app/services/terminal_service.py) — open_claude_code targets that so
 # sessions it starts show up live in the dashboard's terminal pane. Falls
 # back to a native Terminal.app window (the old behaviour) when the
-# dashboard isn't running, e.g. plain `python -m src.main` with no API.
+# dashboard isn't running, e.g. plain `python -m voice.main` with no API.
 _API_BASE_URL = os.environ.get("DANN_API_BASE_URL", "http://localhost:8000")
 
 # Directories that are never git repos and may be very large — skip them entirely
@@ -49,7 +49,7 @@ _SEARCH_ROOTS: list[Path] = [Path.home() / "Git"]
 def _load_configured_projects() -> list[dict] | None:
     """Return the explicit project list from config.yaml, or None if not defined."""
     try:
-        from src.config import load_config
+        from voice.config import load_config
         cfg = load_config()
         entries = cfg.get("projects")
         if not entries or not isinstance(entries, list):

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Generator
 import requests
 
 if TYPE_CHECKING:
-    from src.mcp_client import MCPManager
+    from integrations.client import MCPManager
 
 _MAX_TOOL_ROUNDS = 5
 _SENTENCE_END = re.compile(r'(?<=[.!?])\s+')

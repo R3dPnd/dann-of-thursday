@@ -19,15 +19,15 @@ def _mock_response(content="Hello!", tool_calls=None):
 
 class TestGenerateResponse:
     def test_returns_content(self):
-        with patch("src.llm.ollama.requests.post", return_value=_mock_response("Hi there!")):
-            from src.llm.ollama import generate_response
+        with patch("voice.llm.ollama.requests.post", return_value=_mock_response("Hi there!")):
+            from voice.llm.ollama import generate_response
             result = generate_response("Hello")
         assert result == "Hi there!"
 
     def test_strips_whitespace(self):
-        with patch("src.llm.ollama.requests.post",
+        with patch("voice.llm.ollama.requests.post",
                    return_value=_mock_response("  Hi!  \n")):
-            from src.llm.ollama import generate_response
+            from voice.llm.ollama import generate_response
             result = generate_response("Hello")
         assert result == "Hi!"
 
@@ -35,24 +35,24 @@ class TestGenerateResponse:
         resp = MagicMock()
         resp.raise_for_status = MagicMock()
         resp.json.return_value = {"message": {}}
-        with patch("src.llm.ollama.requests.post", return_value=resp):
-            from src.llm.ollama import generate_response
+        with patch("voice.llm.ollama.requests.post", return_value=resp):
+            from voice.llm.ollama import generate_response
             result = generate_response("Hello")
         assert result == ""
 
     def test_posts_to_correct_url(self):
-        with patch("src.llm.ollama.requests.post",
+        with patch("voice.llm.ollama.requests.post",
                    return_value=_mock_response()) as mock_post:
-            from src.llm.ollama import generate_response
+            from voice.llm.ollama import generate_response
             generate_response("Hello", base_url="http://localhost:11434")
         mock_post.assert_called_once()
         url = mock_post.call_args[0][0]
         assert url == "http://localhost:11434/api/chat"
 
     def test_system_prompt_included_in_messages(self):
-        with patch("src.llm.ollama.requests.post",
+        with patch("voice.llm.ollama.requests.post",
                    return_value=_mock_response()) as mock_post:
-            from src.llm.ollama import generate_response
+            from voice.llm.ollama import generate_response
             generate_response("What's up", system_prompt="You are a pirate.")
         payload = mock_post.call_args[1]["json"]
         messages = payload["messages"]
@@ -60,9 +60,9 @@ class TestGenerateResponse:
         assert messages[-1] == {"role": "user", "content": "What's up"}
 
     def test_no_system_prompt_omitted(self):
-        with patch("src.llm.ollama.requests.post",
+        with patch("voice.llm.ollama.requests.post",
                    return_value=_mock_response()) as mock_post:
-            from src.llm.ollama import generate_response
+            from voice.llm.ollama import generate_response
             generate_response("Hi", system_prompt="")
         payload = mock_post.call_args[1]["json"]
         messages = payload["messages"]
@@ -78,9 +78,9 @@ class TestHistory:
             {"role": "user", "content": "first question"},
             {"role": "assistant", "content": "first answer"},
         ]
-        with patch("src.llm.ollama.requests.post",
+        with patch("voice.llm.ollama.requests.post",
                    return_value=_mock_response()) as mock_post:
-            from src.llm.ollama import generate_response
+            from voice.llm.ollama import generate_response
             generate_response("second question",
                               system_prompt="You are helpful.",
                               history=history)
@@ -92,9 +92,9 @@ class TestHistory:
         assert messages[-1] == {"role": "user", "content": "second question"}
 
     def test_none_history_excluded(self):
-        with patch("src.llm.ollama.requests.post",
+        with patch("voice.llm.ollama.requests.post",
                    return_value=_mock_response()) as mock_post:
-            from src.llm.ollama import generate_response
+            from voice.llm.ollama import generate_response
             generate_response("Hi", system_prompt="Sys.", history=None)
         payload = mock_post.call_args[1]["json"]
         messages = payload["messages"]
@@ -115,8 +115,8 @@ class TestToolCalling:
         mock_mcp = MagicMock()
         mock_mcp.call_tool.return_value = "project-a, project-b"
 
-        with patch("src.llm.ollama.requests.post", side_effect=responses):
-            from src.llm.ollama import generate_response
+        with patch("voice.llm.ollama.requests.post", side_effect=responses):
+            from voice.llm.ollama import generate_response
             result = generate_response("List projects",
                                        tools=[{"name": "list_projects"}],
                                        mcp=mock_mcp)
@@ -133,8 +133,8 @@ class TestToolCalling:
         mock_mcp = MagicMock()
         mock_mcp.call_tool.side_effect = RuntimeError("tool failed")
 
-        with patch("src.llm.ollama.requests.post", side_effect=responses):
-            from src.llm.ollama import generate_response
+        with patch("voice.llm.ollama.requests.post", side_effect=responses):
+            from voice.llm.ollama import generate_response
             result = generate_response("Do something", tools=[{}], mcp=mock_mcp)
 
         assert result == "Something went wrong."
@@ -144,8 +144,8 @@ class TestToolCalling:
         tool_call = {"function": {"name": "whatever", "arguments": {}}}
         resp = _mock_response(content="fallback text", tool_calls=[tool_call])
 
-        with patch("src.llm.ollama.requests.post", return_value=resp):
-            from src.llm.ollama import generate_response
+        with patch("voice.llm.ollama.requests.post", return_value=resp):
+            from voice.llm.ollama import generate_response
             result = generate_response("Hi", tools=[{}], mcp=None)
 
         assert result == "fallback text"
@@ -158,8 +158,8 @@ class TestToolCalling:
         mock_mcp = MagicMock()
         mock_mcp.call_tool.return_value = "result"
 
-        with patch("src.llm.ollama.requests.post", side_effect=responses):
-            from src.llm.ollama import generate_response, _MAX_TOOL_ROUNDS
+        with patch("voice.llm.ollama.requests.post", side_effect=responses):
+            from voice.llm.ollama import generate_response, _MAX_TOOL_ROUNDS
             result = generate_response("Loop", tools=[{}], mcp=mock_mcp)
 
         assert mock_mcp.call_tool.call_count == _MAX_TOOL_ROUNDS

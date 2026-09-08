@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 from pathlib import Path
 
-from src.audio.capture import save_wav
+from voice.audio.capture import save_wav
 
 
 # ── save_wav ──────────────────────────────────────────────────────────────────

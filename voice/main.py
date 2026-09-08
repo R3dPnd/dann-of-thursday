@@ -18,7 +18,7 @@ Setup:
     # Create wake word model via Picovoice Console (see wake-word.md)
 
 Run:
-    python -m src.main
+    python -m voice.main
 """
 
 import sys
@@ -27,7 +27,7 @@ from pathlib import Path
 # Ensure repo root is on path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.orchestrator import Orchestrator
+from voice.orchestrator import Orchestrator
 
 
 def main() -> None:

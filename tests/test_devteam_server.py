@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.mcp_servers.devteam_server import (
+from integrations.servers.devteam_server import (
     _MAX_RUNTIME_SECONDS,
     _load,
     _save,
@@ -29,15 +29,15 @@ _FAKE_PROJECT = {"name": "dann-of-thursday", "path": "/tmp"}
 
 class TestStartDevPipeline:
     def test_unknown_project_returns_not_found(self, tmp_dann_home):
-        with patch("src.mcp_servers.devteam_server.resolve_project", return_value=None), \
-             patch("src.mcp_servers.devteam_server.find_projects", return_value=[]):
+        with patch("integrations.servers.devteam_server.resolve_project", return_value=None), \
+             patch("integrations.servers.devteam_server.find_projects", return_value=[]):
             result = start_dev_pipeline("nonexistent", "do something")
         assert "not found" in result
 
     def test_launches_and_records_running_job(self, tmp_dann_home):
         mock_proc = MagicMock(pid=99999)
-        with patch("src.mcp_servers.devteam_server.resolve_project", return_value=_FAKE_PROJECT), \
-             patch("src.mcp_servers.devteam_server.subprocess.Popen", return_value=mock_proc) as mock_popen:
+        with patch("integrations.servers.devteam_server.resolve_project", return_value=_FAKE_PROJECT), \
+             patch("integrations.servers.devteam_server.subprocess.Popen", return_value=mock_proc) as mock_popen:
             result = start_dev_pipeline("dann-of-thursday", "add a caching layer")
 
         assert "Started dev pipeline" in result

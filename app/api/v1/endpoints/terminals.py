@@ -37,7 +37,7 @@ class TerminalInputRequest(BaseModel):
 @router.post("", summary="Create a PTY terminal session")
 async def create_terminal(body: CreateTerminalRequest) -> JSONResponse:
     from pathlib import Path as _Path
-    from src.config import load_config
+    from voice.config import load_config
 
     cfg = load_config()
     match = None

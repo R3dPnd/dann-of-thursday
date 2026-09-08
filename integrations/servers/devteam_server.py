@@ -32,8 +32,8 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from src.mcp_servers._store import dann_home, load_json, save_json
-from src.mcp_servers.claude_code_server import find_projects, resolve_project
+from integrations.servers._store import dann_home, load_json, save_json
+from integrations.servers.claude_code_server import find_projects, resolve_project
 
 mcp = FastMCP("devteam")
 

@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from src.event_bus import bus
+from voice.event_bus import bus
 
 router = APIRouter()
 

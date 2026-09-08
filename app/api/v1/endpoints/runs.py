@@ -22,7 +22,7 @@ router = APIRouter()
 
 def _load_run_configs() -> dict[str, dict]:
     """Return {project_name: {path, run}} for projects that have a run command."""
-    from src.config import load_config
+    from voice.config import load_config
     cfg = load_config()
     result = {}
     for p in cfg.get("projects", []):

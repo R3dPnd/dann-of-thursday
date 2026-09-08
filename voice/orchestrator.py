@@ -13,19 +13,19 @@ from typing import Any
 
 import numpy as np
 
-from src.agents_config import build_routing_prompt
-from src.audio import play_wav, record_until_silence
-from src.audio.capture import save_wav
-from src.config import load_config
-from src.event_bus import bus
-from src.restart import restart_process
-from src.llm import generate_response, generate_response_streaming
-from src.mcp_client import MCPManager, get_shared_manager
-from src.stt import transcribe_audio
-from src.stt import warmup as warmup_stt
-from src.tts import synthesize_speech
-from src.tts import warmup as warmup_tts
-from src.wakeword import WakeWordDetector
+from shared.agents_config import build_routing_prompt
+from voice.audio import play_wav, record_until_silence
+from voice.audio.capture import save_wav
+from voice.config import load_config
+from voice.event_bus import bus
+from shared.restart import restart_process
+from voice.llm import generate_response, generate_response_streaming
+from integrations.client import MCPManager, get_shared_manager
+from voice.stt import transcribe_audio
+from voice.stt import warmup as warmup_stt
+from voice.tts import synthesize_speech
+from voice.tts import warmup as warmup_tts
+from voice.wakeword import WakeWordDetector
 
 
 class SessionMode(Enum):
@@ -736,7 +736,7 @@ class Orchestrator:
         wake_engine = self._wake_cfg.get("engine", "porcupine")
 
         if wake_engine == "openwakeword":
-            from src.wakeword.openwakeword_detector import OpenWakeWordDetector
+            from voice.wakeword.openwakeword_detector import OpenWakeWordDetector
             wake_model = self._wake_cfg.get("model", "hey_jarvis")
             wake_phrase = Path(wake_model).stem if str(wake_model).endswith(".onnx") else str(wake_model)
             self._detector = OpenWakeWordDetector(

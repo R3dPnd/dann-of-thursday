@@ -21,7 +21,7 @@ from datetime import datetime
 
 from mcp.server.fastmcp import FastMCP
 
-from src.mcp_servers._store import load_json, save_json
+from integrations.servers._store import load_json, save_json
 
 mcp = FastMCP("notes")
 

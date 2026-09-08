@@ -8,7 +8,7 @@ import time
 
 from fastapi import APIRouter
 
-from src.restart import restart_process
+from shared.restart import restart_process
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ def _do_restart() -> None:
     if orchestrator is not None:
         orchestrator.stop()  # releases the wake-word detector + stops the MCP manager
     else:
-        from src.mcp_client import get_shared_manager
+        from integrations.client import get_shared_manager
         mgr = get_shared_manager()
         if mgr.started:
             mgr.stop()

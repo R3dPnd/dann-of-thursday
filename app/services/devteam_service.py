@@ -6,7 +6,7 @@ This module only reads that file — it does not attempt to refresh a job's
 status (Popen polling / PID-liveness), since that logic only works inside
 the MCP server's own process. Status here is whatever was last persisted.
 """
-from src.mcp_servers._store import load_json
+from integrations.servers._store import load_json
 
 _FILE = "devteam_jobs.json"
 

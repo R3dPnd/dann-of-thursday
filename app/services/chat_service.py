@@ -19,12 +19,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from src.agents_config import build_routing_prompt
-from src.config import load_config
-from src.event_bus import bus
-from src.llm.ollama import generate_response
-from src.mcp_client import get_shared_manager
-from src.mcp_servers.claude_code_server import find_projects, resolve_project
+from shared.agents_config import build_routing_prompt
+from voice.config import load_config
+from voice.event_bus import bus
+from voice.llm.ollama import generate_response
+from integrations.client import get_shared_manager
+from integrations.servers.claude_code_server import find_projects, resolve_project
 
 _DANN_DIR = Path.home() / ".dann"
 _STREAMS_FILE = _DANN_DIR / "work_streams.json"

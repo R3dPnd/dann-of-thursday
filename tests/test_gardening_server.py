@@ -1,6 +1,6 @@
 """Unit tests for the gardening MCP server tools."""
 
-from src.mcp_servers.gardening_server import (
+from integrations.servers.gardening_server import (
     add_garden_note,
     list_harvests,
     list_plantings,

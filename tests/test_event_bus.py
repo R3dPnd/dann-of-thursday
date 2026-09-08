@@ -2,7 +2,7 @@
 
 import threading
 import pytest
-from src.event_bus import EventBus
+from voice.event_bus import EventBus
 
 
 @pytest.fixture()

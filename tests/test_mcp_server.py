@@ -17,7 +17,7 @@ class TestNormalise:
         ("already fine",    "already fine"),
     ])
     def test_normalises_correctly(self, name, expected):
-        from src.mcp_servers.claude_code_server import _normalise
+        from integrations.servers.claude_code_server import _normalise
         assert _normalise(name) == expected
 
 
@@ -29,9 +29,9 @@ class TestFindProjects:
         repo.mkdir()
         (repo / ".git").mkdir()
 
-        with patch("src.mcp_servers.claude_code_server._SEARCH_ROOTS", [tmp_path]), \
-             patch("src.mcp_servers.claude_code_server._projects_cache", None):
-            import src.mcp_servers.claude_code_server as srv
+        with patch("integrations.servers.claude_code_server._SEARCH_ROOTS", [tmp_path]), \
+             patch("integrations.servers.claude_code_server._projects_cache", None):
+            import integrations.servers.claude_code_server as srv
             srv._projects_cache = None
             projects = srv.find_projects()
 
@@ -49,9 +49,9 @@ class TestFindProjects:
         fake_repo.mkdir()
         (fake_repo / ".git").mkdir()
 
-        with patch("src.mcp_servers.claude_code_server._SEARCH_ROOTS", [tmp_path]), \
-             patch("src.mcp_servers.claude_code_server._projects_cache", None):
-            import src.mcp_servers.claude_code_server as srv
+        with patch("integrations.servers.claude_code_server._SEARCH_ROOTS", [tmp_path]), \
+             patch("integrations.servers.claude_code_server._projects_cache", None):
+            import integrations.servers.claude_code_server as srv
             srv._projects_cache = None
             projects = srv.find_projects()
 
@@ -65,9 +65,9 @@ class TestFindProjects:
             repo.mkdir()
             (repo / ".git").mkdir()
 
-        with patch("src.mcp_servers.claude_code_server._SEARCH_ROOTS", [tmp_path]), \
-             patch("src.mcp_servers.claude_code_server._projects_cache", None):
-            import src.mcp_servers.claude_code_server as srv
+        with patch("integrations.servers.claude_code_server._SEARCH_ROOTS", [tmp_path]), \
+             patch("integrations.servers.claude_code_server._projects_cache", None):
+            import integrations.servers.claude_code_server as srv
             srv._projects_cache = None
             projects = srv.find_projects()
 
@@ -77,8 +77,8 @@ class TestFindProjects:
     def test_uses_cache_on_second_call(self, tmp_path):
         cached = [{"name": "cached-project", "path": str(tmp_path)}]
 
-        with patch("src.mcp_servers.claude_code_server._projects_cache", cached):
-            import src.mcp_servers.claude_code_server as srv
+        with patch("integrations.servers.claude_code_server._projects_cache", cached):
+            import integrations.servers.claude_code_server as srv
             result = srv.find_projects()
 
         assert result is cached
@@ -86,9 +86,9 @@ class TestFindProjects:
     def test_missing_root_directory_returns_empty(self, tmp_path):
         missing = tmp_path / "nonexistent"
 
-        with patch("src.mcp_servers.claude_code_server._SEARCH_ROOTS", [missing]), \
-             patch("src.mcp_servers.claude_code_server._projects_cache", None):
-            import src.mcp_servers.claude_code_server as srv
+        with patch("integrations.servers.claude_code_server._SEARCH_ROOTS", [missing]), \
+             patch("integrations.servers.claude_code_server._projects_cache", None):
+            import integrations.servers.claude_code_server as srv
             srv._projects_cache = None
             projects = srv.find_projects()
 
@@ -107,33 +107,33 @@ class TestResolveProject:
 
     def test_exact_normalised_match(self):
         projects = self._make_projects()
-        with patch("src.mcp_servers.claude_code_server.find_projects",
+        with patch("integrations.servers.claude_code_server.find_projects",
                    return_value=projects):
-            from src.mcp_servers.claude_code_server import resolve_project
+            from integrations.servers.claude_code_server import resolve_project
             result = resolve_project("dev diary")
         assert result["name"] == "dev-diary"
 
     def test_partial_match_fallback(self):
         projects = self._make_projects()
-        with patch("src.mcp_servers.claude_code_server.find_projects",
+        with patch("integrations.servers.claude_code_server.find_projects",
                    return_value=projects):
-            from src.mcp_servers.claude_code_server import resolve_project
+            from integrations.servers.claude_code_server import resolve_project
             result = resolve_project("fieldwatch")
         assert result["name"] == "fieldwatch-api"
 
     def test_unknown_project_returns_none(self):
         projects = self._make_projects()
-        with patch("src.mcp_servers.claude_code_server.find_projects",
+        with patch("integrations.servers.claude_code_server.find_projects",
                    return_value=projects):
-            from src.mcp_servers.claude_code_server import resolve_project
+            from integrations.servers.claude_code_server import resolve_project
             result = resolve_project("nonexistent-repo")
         assert result is None
 
     def test_hyphens_in_query_normalised(self):
         projects = self._make_projects()
-        with patch("src.mcp_servers.claude_code_server.find_projects",
+        with patch("integrations.servers.claude_code_server.find_projects",
                    return_value=projects):
-            from src.mcp_servers.claude_code_server import resolve_project
+            from integrations.servers.claude_code_server import resolve_project
             result = resolve_project("dann-of-thursday")
         assert result["name"] == "dann-of-thursday"
 
@@ -146,17 +146,17 @@ class TestListProjects:
             {"name": "alpha", "path": "/repos/alpha"},
             {"name": "beta",  "path": "/repos/beta"},
         ]
-        with patch("src.mcp_servers.claude_code_server.find_projects",
+        with patch("integrations.servers.claude_code_server.find_projects",
                    return_value=projects):
-            from src.mcp_servers.claude_code_server import list_projects
+            from integrations.servers.claude_code_server import list_projects
             result = list_projects()
         assert "alpha" in result
         assert "beta" in result
 
     def test_empty_returns_no_projects_message(self):
-        with patch("src.mcp_servers.claude_code_server.find_projects",
+        with patch("integrations.servers.claude_code_server.find_projects",
                    return_value=[]):
-            from src.mcp_servers.claude_code_server import list_projects
+            from integrations.servers.claude_code_server import list_projects
             result = list_projects()
         assert "No projects found" in result
 
@@ -171,11 +171,11 @@ class TestAskClaudeCode:
         mock_result.stdout = "  The project is a diary app.  "
         mock_result.stderr = ""
 
-        with patch("src.mcp_servers.claude_code_server.resolve_project",
+        with patch("integrations.servers.claude_code_server.resolve_project",
                    return_value=project), \
-             patch("src.mcp_servers.claude_code_server.subprocess.run",
+             patch("integrations.servers.claude_code_server.subprocess.run",
                    return_value=mock_result):
-            from src.mcp_servers.claude_code_server import ask_claude_code
+            from integrations.servers.claude_code_server import ask_claude_code
             result = ask_claude_code("dev diary", "Summarise this project")
 
         assert result == "The project is a diary app."
@@ -187,21 +187,21 @@ class TestAskClaudeCode:
         mock_result.stdout = ""
         mock_result.stderr = "claude: command not found"
 
-        with patch("src.mcp_servers.claude_code_server.resolve_project",
+        with patch("integrations.servers.claude_code_server.resolve_project",
                    return_value=project), \
-             patch("src.mcp_servers.claude_code_server.subprocess.run",
+             patch("integrations.servers.claude_code_server.subprocess.run",
                    return_value=mock_result):
-            from src.mcp_servers.claude_code_server import ask_claude_code
+            from integrations.servers.claude_code_server import ask_claude_code
             result = ask_claude_code("dev diary", "Summarise")
 
         assert "error" in result.lower()
 
     def test_unknown_project_returns_not_found(self):
-        with patch("src.mcp_servers.claude_code_server.resolve_project",
+        with patch("integrations.servers.claude_code_server.resolve_project",
                    return_value=None), \
-             patch("src.mcp_servers.claude_code_server.find_projects",
+             patch("integrations.servers.claude_code_server.find_projects",
                    return_value=[]):
-            from src.mcp_servers.claude_code_server import ask_claude_code
+            from integrations.servers.claude_code_server import ask_claude_code
             result = ask_claude_code("ghost-project", "Do something")
 
         assert "not found" in result.lower()
@@ -213,11 +213,11 @@ class TestAskClaudeCode:
         mock_result.stdout = "   "
         mock_result.stderr = ""
 
-        with patch("src.mcp_servers.claude_code_server.resolve_project",
+        with patch("integrations.servers.claude_code_server.resolve_project",
                    return_value=project), \
-             patch("src.mcp_servers.claude_code_server.subprocess.run",
+             patch("integrations.servers.claude_code_server.subprocess.run",
                    return_value=mock_result):
-            from src.mcp_servers.claude_code_server import ask_claude_code
+            from integrations.servers.claude_code_server import ask_claude_code
             result = ask_claude_code("dev diary", "Summarise")
 
         assert "empty" in result.lower()

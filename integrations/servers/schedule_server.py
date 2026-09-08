@@ -19,7 +19,7 @@ import datetime as dt
 
 from mcp.server.fastmcp import FastMCP
 
-from src.mcp_servers._store import dann_home
+from integrations.servers._store import dann_home
 
 mcp = FastMCP("schedule")
 

@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("", summary="List note repositories")
 async def list_notes() -> JSONResponse:
-    from src.config import load_config
+    from voice.config import load_config
     cfg = load_config()
     notes = []
     for entry in cfg.get("notes", []):

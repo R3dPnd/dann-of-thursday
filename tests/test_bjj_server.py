@@ -1,6 +1,6 @@
 """Unit tests for the BJJ MCP server tools."""
 
-from src.mcp_servers.bjj_server import (
+from integrations.servers.bjj_server import (
     add_training_note,
     list_sessions,
     list_techniques,
