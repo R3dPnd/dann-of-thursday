@@ -20,7 +20,11 @@ models/*.onnx.data
 models/*.bin
 models/*.npz
 
-# Real voice recordings used to train the wake word — personal, keep local only
+# Wake word training data — synthetic clips regenerated via
+# scripts/wakeword/generate_wakeword_samples.py; real recordings are personal.
+# No longer tracked as of the reorg (was 426MB / 4500 files in git history).
+training/positive/
+training/adversarial/
 training/positive_real/
 
 # Python artifacts
@@ -31,3 +35,7 @@ __pycache__/
 # UI
 ui/node_modules/
 ui/dist/
+
+# Editor/IDE project files — personal, not shared
+.idea/
+.DS_Store
