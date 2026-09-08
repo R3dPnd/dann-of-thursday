@@ -89,6 +89,33 @@ export interface PromptBuilderResult {
   reasoning: string
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  ts: number
+}
+
+export interface WorkStream {
+  id: string
+  project: string
+  title: string
+  created_at: number
+  updated_at: number
+  messages: ChatMessage[]
+}
+
+export interface DevTeamJob {
+  id: string
+  project: string
+  task: string
+  pid: number
+  log_path: string
+  status: 'running' | 'done' | 'failed' | 'killed' | 'timed_out'
+  started_at: string
+  finished_at: string | null
+  exit_code: number | null
+}
+
 export interface LogEntry {
   timestamp: string
   level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL'

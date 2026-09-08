@@ -1,11 +1,14 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useDannEvents } from './hooks/useDannEvents'
+import { useFocusModeShortcut } from './hooks/useFocusModeShortcut'
+import { useDannStore } from './hooks/useDannState'
 import { StatusBar } from './components/StatusBar'
 import { ProjectPanel } from './components/ProjectPanel'
 import LogPanel from './components/LogPanel'
 import { LeftNav } from './components/LeftNav'
 import { VoicePanel } from './components/VoicePanel'
 import { VoiceWidget } from './components/VoiceWidget'
+import { FocusMode } from './components/focus/FocusMode'
 import { api } from './lib/api'
 import type { TerminalPaneHandle } from './components/TerminalPane'
 
@@ -14,6 +17,7 @@ const MetricsPage = lazy(() => import('./components/MetricsPage'))
 const TerminalPane = lazy(() => import('./components/TerminalPane'))
 const RunOutputPane = lazy(() => import('./components/RunOutputPane'))
 const NotesPanel = lazy(() => import('./components/NotesPanel').then(m => ({ default: m.NotesPanel })))
+const ChatPanel = lazy(() => import('./components/ChatPanel')) // the main "DANN" tab: chat + per-project terminal
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
@@ -51,46 +55,36 @@ function tabLabel(t: Tab): string {
 
 export default function App() {
   useDannEvents()
+  useFocusModeShortcut()
+
+  const focusMode = useDannStore(s => s.focusMode)
+  const setFocusMode = useDannStore(s => s.setFocusMode)
 
   const [tabs, setTabs] = useState<Tab[]>(['dann', 'projects', 'notes', 'metrics'])
   const [activeTabId, setActiveTabId] = useState<string>('dann')
   const terminalRefs = useRef<Map<string, React.RefObject<TerminalPaneHandle>>>(new Map())
 
-  // ── DANN persistent terminal ───────────────────────────────────────────────
-  const [dannSessionId, setDannSessionId] = useState<string | null>(null)
-  const dannTermRef = useRef<TerminalPaneHandle>(null)
-
-  // On mount: reconnect to any sessions the backend still has alive (survives page refresh)
+  // On mount: reconnect to any project terminal sessions the backend still
+  // has alive (survives page refresh). The DANN tab's own terminal (per
+  // work-stream project) is looked up by ChatPanel itself, not here.
   useEffect(() => {
     api.listTerminals().then((sessions) => {
       for (const s of sessions) {
         if (!s.alive) continue
-        if (s.project_name === 'dann') {
-          setDannSessionId(s.session_id)
-        } else {
-          const tab: TerminalTab = {
-            kind: 'terminal',
-            id: `term-${s.session_id}`,
-            sessionId: s.session_id,
-            projectName: s.project_name,
-          }
-          terminalRefs.current.set(tab.id, { current: null } as React.RefObject<TerminalPaneHandle>)
-          setTabs((prev) => {
-            if (prev.some((t): t is TerminalTab => typeof t !== 'string' && t.kind === 'terminal' && (t as TerminalTab).sessionId === s.session_id)) return prev
-            return [...prev, tab]
-          })
+        const tab: TerminalTab = {
+          kind: 'terminal',
+          id: `term-${s.session_id}`,
+          sessionId: s.session_id,
+          projectName: s.project_name,
         }
+        terminalRefs.current.set(tab.id, { current: null } as React.RefObject<TerminalPaneHandle>)
+        setTabs((prev) => {
+          if (prev.some((t): t is TerminalTab => typeof t !== 'string' && t.kind === 'terminal' && (t as TerminalTab).sessionId === s.session_id)) return prev
+          return [...prev, tab]
+        })
       }
     }).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (activeTabId === 'dann' && !dannSessionId) {
-      api.createDannTerminal().then((s) => setDannSessionId(s.session_id)).catch((err) => {
-        console.error('Failed to start DANN terminal', err)
-      })
-    }
-  }, [activeTabId, dannSessionId])
 
   const openTerminal = async (projectName: string, command?: string) => {
     // If a terminal tab for this project already exists, just switch to it
@@ -142,7 +136,8 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-950 overflow-hidden">
+    <>
+    <div className={`h-screen flex flex-col bg-zinc-950 overflow-hidden ${focusMode ? 'invisible pointer-events-none' : ''}`}>
       <StatusBar />
 
       {/* Tab bar */}
@@ -167,6 +162,15 @@ export default function App() {
             >
               {isDannTab && (
                 <span className="text-[10px] font-mono text-teal-500">{'>'}_</span>
+              )}
+              {isDannTab && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setFocusMode(true) }}
+                  title="Enter Focus Mode (Cmd/Ctrl+Shift+F)"
+                  className="ml-1 text-[9px] text-teal-700 hover:text-teal-400 transition-colors leading-none"
+                >
+                  ⛶
+                </button>
               )}
               {!isDannTab && !isRunTab && typeof tab !== 'string' && (
                 <span className="text-[10px] text-emerald-400 font-mono">{'>'}_</span>
@@ -196,20 +200,11 @@ export default function App() {
       {/* Tab content — all panels stacked absolutely so display:none never nukes canvas contexts */}
       <main className="flex-1 overflow-hidden relative">
 
-        {/* DANN persistent terminal */}
-        <div className={`absolute inset-0 p-2 ${activeTabId === 'dann' ? 'z-10' : 'opacity-0 pointer-events-none'}`}>
-          {dannSessionId ? (
-            <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Opening terminal…</div>}>
-              <TerminalPane
-                ref={dannTermRef}
-                sessionId={dannSessionId}
-                isActive={activeTabId === 'dann'}
-                onExit={() => setDannSessionId(null)}
-              />
-            </Suspense>
-          ) : (
-            <div className="p-8 text-teal-700 text-sm font-mono animate-pulse">Starting DANN terminal…</div>
-          )}
+        {/* DANN — chat with Dann + the live terminal for whichever project's work stream is active */}
+        <div className={`absolute inset-0 overflow-hidden ${activeTabId === 'dann' ? '' : 'opacity-0 pointer-events-none'}`}>
+          <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Loading…</div>}>
+            <ChatPanel />
+          </Suspense>
         </div>
 
         <div className={`absolute inset-0 overflow-y-auto ${activeTabId === 'projects' ? '' : 'opacity-0 pointer-events-none'}`}>
@@ -272,5 +267,7 @@ export default function App() {
       <VoiceWidget />
       <LogPanel />
     </div>
+    <FocusMode active={focusMode} onExit={() => setFocusMode(false)} />
+    </>
   )
 }

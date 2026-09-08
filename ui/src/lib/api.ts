@@ -1,4 +1,4 @@
-import type { LogEntry, MetricSummary, Project, RunStatus, StateSnapshot, PromptBuilderResult } from '../types'
+import type { DevTeamJob, LogEntry, MetricSummary, Project, RunStatus, StateSnapshot, PromptBuilderResult, WorkStream } from '../types'
 
 const BASE = '/api/v1'
 
@@ -48,12 +48,6 @@ export const api = {
       { project_name: projectName, rows, cols, ...(command ? { command } : {}) },
     ),
 
-  createDannTerminal: (rows = 40, cols = 120) =>
-    post<{ session_id: string; project_name: string; project_path: string; alive: boolean }>(
-      '/terminals/dann',
-      { rows, cols },
-    ),
-
   closeTerminal: (sessionId: string) =>
     fetch(`/api/v1/terminals/${sessionId}`, { method: 'DELETE' }).catch(() => {}),
 
@@ -73,6 +67,19 @@ export const api = {
   buildPrompt: (body: { thoughts: string; goals: string; notes: string; custom_sections: { title: string; content: string }[] }) =>
     post<PromptBuilderResult>('/prompt-builder', body),
 
+  listStreams: () => get<{ streams: WorkStream[] }>('/chat/streams').then(r => r.streams),
+
+  createStream: (project: string, title?: string) =>
+    post<WorkStream>('/chat/streams', { project, ...(title ? { title } : {}) }),
+
+  getStream: (id: string) => get<WorkStream>(`/chat/streams/${encodeURIComponent(id)}`),
+
+  sendChatMessage: (id: string, text: string) =>
+    post<{ response: string; latency_ms: number }>(`/chat/streams/${encodeURIComponent(id)}/messages`, { text }),
+
+  deleteStream: (id: string) =>
+    fetch(`/api/v1/chat/streams/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
   getLogs: (params?: { level?: string; module?: string; search?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams()
     if (params?.level) qs.set('level', params.level)
@@ -82,4 +89,14 @@ export const api = {
     if (params?.offset != null) qs.set('offset', String(params.offset))
     return get<{ total: number; offset: number; limit: number; entries: LogEntry[] }>(`/logs?${qs}`)
   },
+
+  getDevTeamJobs: (params?: { project?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.project) qs.set('project', params.project)
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    if (params?.offset != null) qs.set('offset', String(params.offset))
+    return get<{ total: number; offset: number; limit: number; jobs: DevTeamJob[] }>(`/devteam?${qs}`)
+  },
+
+  restartDann: () => post<{ status: string }>('/system/restart'),
 }

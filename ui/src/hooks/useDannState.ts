@@ -13,6 +13,7 @@ function summarisePayload(type: string, payload: Record<string, unknown>): strin
   if (type === 'metric')         return `stt:${payload.stt_ms} llm:${payload.llm_ms} tts:${payload.tts_ms} → ${payload.status}`
   if (type === 'error')          return String(payload.message ?? '')
   if (type === 'state.changed')  return `mode=${payload.mode} running=${payload.running}`
+  if (type === 'wake.detected')  return `score=${Number(payload.score ?? 0).toFixed(2)}${payload.since_session_end_s != null ? ` Δend=${Number(payload.since_session_end_s).toFixed(1)}s` : ''}`
   if (type === 'session.start')  return String(payload.session_id ?? '').slice(0, 12)
   if (type === 'session.end')    return String(payload.reason ?? '')
   return ''
@@ -55,6 +56,10 @@ interface DannStore {
   // Raw WebSocket events for the debug panel (capped)
   rawEvents: RawEvent[]
 
+  // Full-screen Focus Mode — manually toggled, or auto-entered/exited on
+  // session.start/session.end (see applyEvent)
+  focusMode: boolean
+
   // Actions
   applySnapshot: (snapshot: StateSnapshot) => void
   applyEvent: (type: string, payload: Record<string, unknown>) => void
@@ -64,6 +69,8 @@ interface DannStore {
   setMetricSummary: (summary: MetricSummary) => void
   clearUnreadErrors: () => void
   prependTurns: (turns: VoiceTurn[]) => void
+  setFocusMode: (v: boolean) => void
+  toggleFocusMode: () => void
 }
 
 function setStage(stage: PipelineStage): Partial<DannStore> {
@@ -89,6 +96,7 @@ export const useDannStore = create<DannStore>((set) => ({
   logEntries: [],
   unreadErrors: 0,
   rawEvents: [],
+  focusMode: false,
 
   applySnapshot: (snapshot) =>
     set({
@@ -123,11 +131,11 @@ export const useDannStore = create<DannStore>((set) => ({
         break
 
       case 'session.start':
-        set({ sessionId: payload.session_id as string, ...setStage('wake') })
+        set({ sessionId: payload.session_id as string, focusMode: true, ...setStage('wake') })
         break
 
       case 'session.end':
-        set({ sessionId: null, mode: 'idle', ...setStage('idle'), _pendingStt: null, liveResponse: '' })
+        set({ sessionId: null, mode: 'idle', focusMode: false, ...setStage('idle'), _pendingStt: null, liveResponse: '' })
         break
 
       case 'turn.start':
@@ -295,5 +303,14 @@ export const useDannStore = create<DannStore>((set) => ({
   setNoteProjects:(notes)     => set({ noteProjects: notes }),
   setMetricSummary:(summary)  => set({ metricSummary: summary }),
   clearUnreadErrors: ()       => set({ unreadErrors: 0 }),
-  prependTurns: (turns)       => set((s) => ({ voiceTurns: [...turns, ...s.voiceTurns] })),
+  // Dedupe by id — VoicePanel's history-load effect can fire more than once
+  // (React 18 StrictMode double-invokes effects in dev), and history-loaded
+  // turns use deterministic ids, so a naive concat would duplicate them.
+  prependTurns: (turns) => set((s) => {
+    const seen = new Set(s.voiceTurns.map((t) => t.id))
+    const fresh = turns.filter((t) => !seen.has(t.id))
+    return fresh.length ? { voiceTurns: [...fresh, ...s.voiceTurns] } : {}
+  }),
+  setFocusMode: (v) => set({ focusMode: v }),
+  toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
 }))

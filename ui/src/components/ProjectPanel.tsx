@@ -27,7 +27,7 @@ function ProjectCard({
   project,
   isActive,
   onOpenTerminal,
-  onRunOpened,
+  onRunOpened: _onRunOpened,
 }: {
   project: Project
   isActive: boolean

@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useDannStore } from '../hooks/useDannState'
+import { api } from '../lib/api'
 import type { Mode, PipelineStage } from '../types'
 
 interface ModeConfig {
@@ -38,10 +40,21 @@ export function StatusBar() {
   const pipelineStage = useDannStore((s) => s.pipelineStage)
   const cfg = modeConfig(mode, project)
   const stage = STAGE_CONFIG[pipelineStage]
+  const [restarting, setRestarting] = useState(false)
 
   const scrollToActive = () => {
     if (project) {
       document.getElementById(`project-${project}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
+
+  const handleRestart = async () => {
+    if (!window.confirm('Restart Dann? This will drop any active voice session and reconnect the dashboard.')) return
+    setRestarting(true)
+    try {
+      await api.restartDann()
+    } catch {
+      // The process is replacing itself — a failed fetch here is expected, not an error.
     }
   }
 
@@ -69,18 +82,29 @@ export function StatusBar() {
         )}
       </div>
 
-      {/* Right: WS connection indicator */}
-      {wsConnected ? (
-        <div className="flex items-center gap-1.5 text-xs text-zinc-600">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500/70" />
-          connected
-        </div>
-      ) : (
-        <div className="flex items-center gap-1.5 text-xs text-neon-red animate-pulse">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
-          offline
-        </div>
-      )}
+      {/* Right: restart + WS connection indicator */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleRestart}
+          disabled={restarting}
+          title="Restart Dann"
+          className="text-xs text-zinc-600 hover:text-zinc-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {restarting ? 'restarting…' : '⟳'}
+        </button>
+
+        {wsConnected ? (
+          <div className="flex items-center gap-1.5 text-xs text-zinc-600">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500/70" />
+            connected
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-neon-red animate-pulse">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
+            offline
+          </div>
+        )}
+      </div>
     </header>
   )
 }

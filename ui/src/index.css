@@ -145,8 +145,8 @@ header.status-bar {
 /* ── Voice state orbs ─────────────────────────────────────────────────────── */
 
 .dann-orb {
-  width: 88px;
-  height: 88px;
+  width: var(--dann-orb-size, 88px);
+  height: var(--dann-orb-size, 88px);
   border-radius: 50%;
   position: relative;
   flex-shrink: 0;
@@ -187,13 +187,13 @@ header.status-bar {
 .dann-orb-recording::after {
   content: '';
   position: absolute;
-  inset: -16px;
+  inset: calc(var(--dann-orb-size, 88px) * -0.182);
   border-radius: 50%;
   border: 1px solid #ff337766;
   animation: dann-ring-out 1.8s ease-out infinite;
 }
 .dann-orb-recording::after {
-  inset: -32px;
+  inset: calc(var(--dann-orb-size, 88px) * -0.364);
   border-color: #ff337733;
   animation-delay: 0.9s;
 }
@@ -224,19 +224,22 @@ header.status-bar {
   align-items: flex-end;
   justify-content: center;
   gap: 6px;
-  width: 88px;
-  height: 88px;
-  padding: 20px 10px 10px;
+  width: var(--dann-orb-size, 88px);
+  height: var(--dann-orb-size, 88px);
+  padding:
+    calc(var(--dann-orb-size, 88px) * 0.227)
+    calc(var(--dann-orb-size, 88px) * 0.114)
+    calc(var(--dann-orb-size, 88px) * 0.114);
 }
 .dann-eq-bar {
   flex: 1;
-  min-height: 8px;
+  min-height: calc(var(--dann-orb-size, 88px) * 0.09);
   border-radius: 2px 2px 0 0;
   background: linear-gradient(to top, #00ffdd, #00ffdd88);
   box-shadow: 0 0 8px #00ffdd77;
   animation: dann-eq 0.8s ease-in-out infinite alternate;
 }
 @keyframes dann-eq {
-  from { height: 8px;  opacity: 0.45; }
-  to   { height: 54px; opacity: 1; }
+  from { height: calc(var(--dann-orb-size, 88px) * 0.09);  opacity: 0.45; }
+  to   { height: calc(var(--dann-orb-size, 88px) * 0.614); opacity: 1; }
 }

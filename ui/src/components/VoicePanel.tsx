@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDannStore } from '../hooks/useDannState'
 import { api } from '../lib/api'
+import { StateOrb } from './voice/StateOrb'
 import type { PipelineStage, RawEvent, TurnTrace, VoiceTurn } from '../types'
 
 // ── Stage config ──────────────────────────────────────────────────────────────
@@ -11,30 +12,6 @@ const STAGE_INFO: Record<PipelineStage, { label: string; color: string }> = {
   recording: { label: 'Listening…',               color: 'text-neon-red' },
   thinking:  { label: 'Thinking…',                color: 'text-neon-blue' },
   speaking:  { label: 'Speaking…',                color: 'text-neon-teal' },
-}
-
-const EQ_BARS: { delay: string; duration: string }[] = [
-  { delay: '0s',    duration: '0.55s' },
-  { delay: '0.15s', duration: '0.80s' },
-  { delay: '0.05s', duration: '0.50s' },
-  { delay: '0.25s', duration: '0.70s' },
-  { delay: '0.10s', duration: '0.90s' },
-]
-
-// ── Orb ───────────────────────────────────────────────────────────────────────
-
-function StateOrb({ stage, active }: { stage: PipelineStage; active: boolean }) {
-  if (!active) return <div className="dann-orb dann-orb-idle" />
-  if (stage === 'speaking') {
-    return (
-      <div className="dann-equalizer">
-        {EQ_BARS.map((b, i) => (
-          <div key={i} className="dann-eq-bar" style={{ animationDelay: b.delay, animationDuration: b.duration }} />
-        ))}
-      </div>
-    )
-  }
-  return <div className={`dann-orb dann-orb-${stage}`} />
 }
 
 // ── Stage duration timer ──────────────────────────────────────────────────────
@@ -58,7 +35,7 @@ function StageDuration({ stageEnteredAt, stage }: { stageEnteredAt: number; stag
 
 // ── Per-turn trace bar ────────────────────────────────────────────────────────
 
-function TraceBar({ trace }: { trace: TurnTrace }) {
+export function TraceBar({ trace }: { trace: TurnTrace }) {
   const steps: { label: string; ms: number | null; color: string }[] = [
     { label: 'STT',  ms: trace.stt_ms,  color: 'text-neon-orange' },
     { label: 'LLM',  ms: trace.llm_ms,  color: 'text-neon-blue'   },

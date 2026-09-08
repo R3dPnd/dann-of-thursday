@@ -56,6 +56,7 @@ async function createWindow () {
     height: 900,
     minWidth: 900,
     minHeight: 600,
+    fullscreen: process.env.DANN_FULLSCREEN === '1',
     backgroundColor: '#09090b', // zinc-950 — prevents white flash before React loads
     show: false,
     webPreferences: {
