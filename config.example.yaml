@@ -73,8 +73,8 @@ tts:
 
 agents:
   # Structured routing targets for Dann's brain — compiled at runtime (see
-  # src/agents_config.py) into the "AGENTS" section appended to
-  # ollama.system_prompt above, and shared by both voice (src/orchestrator.py)
+  # shared/agents_config.py) into the "AGENTS" section appended to
+  # ollama.system_prompt above, and shared by both voice (voice/orchestrator.py)
   # and text chat (app/services/chat_service.py). Add a new routing target
   # here instead of hand-editing prompt prose. `tools` lists the MCP tool
   # name(s) to call for that agent; omit it for "local", which means
@@ -147,46 +147,46 @@ mcp:
   servers:
     # always_on: true  -> connected at startup, stays up for the session.
     # always_on: false (default) -> registered but dormant; Dann's LLM
-    # starts it on demand via the enable_module tool (see src/mcp_client.py).
+    # starts it on demand via the enable_module tool (see integrations/client.py).
     - name: projects
       command: .venv/bin/python
-      args: ["-m", "src.mcp_servers.claude_code_server"]
+      args: ["-m", "integrations.servers.claude_code_server"]
       description: "Project discovery, Claude Code sessions, and web search — all via the claude CLI"
       always_on: true
 
     - name: schedule
       command: .venv/bin/python
-      args: ["-m", "src.mcp_servers.schedule_server"]
+      args: ["-m", "integrations.servers.schedule_server"]
       description: "Google Calendar — view, create, and search events (needs one-time setup, see schedule-setup.md)"
       always_on: false
 
     - name: notes
       command: .venv/bin/python
-      args: ["-m", "src.mcp_servers.notes_server"]
+      args: ["-m", "integrations.servers.notes_server"]
       description: "Quick notes and reminders, stored locally"
       always_on: false
 
     - name: gardening
       command: .venv/bin/python
-      args: ["-m", "src.mcp_servers.gardening_server"]
+      args: ["-m", "integrations.servers.gardening_server"]
       description: "Garden log — plantings, harvests, and care notes, stored locally"
       always_on: false
 
     - name: bjj
       command: .venv/bin/python
-      args: ["-m", "src.mcp_servers.bjj_server"]
+      args: ["-m", "integrations.servers.bjj_server"]
       description: "BJJ training log — sessions, techniques, and notes, stored locally"
       always_on: false
 
     - name: devteam
       command: .venv/bin/python
-      args: ["-m", "src.mcp_servers.devteam_server"]
+      args: ["-m", "integrations.servers.devteam_server"]
       description: "Background multi-phase Claude Code pipelines (research/plan/implement/test/devops)"
       always_on: false
 
     - name: system
       command: .venv/bin/python
-      args: ["-m", "src.mcp_servers.system_server"]
+      args: ["-m", "integrations.servers.system_server"]
       description: "Local machine control — volume, opening apps, locking the screen"
       always_on: false
 
