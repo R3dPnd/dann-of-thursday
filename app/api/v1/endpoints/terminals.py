@@ -30,23 +30,8 @@ class CreateTerminalRequest(BaseModel):
     cols: int = 80
 
 
-class CreateRootTerminalRequest(BaseModel):
-    rows: int = 24
-    cols: int = 80
-
-
-@router.post("/dann", summary="Create the persistent DANN terminal at the project root")
-async def create_dann_terminal(body: CreateRootTerminalRequest) -> JSONResponse:
-    """Open a shell at the dann-of-thursday repo root."""
-    from pathlib import Path
-    root = Path(__file__).resolve().parents[4]  # app/api/v1/endpoints → project root
-    session = terminal_service.create_session(
-        project_name="dann",
-        project_path=str(root),
-        rows=body.rows,
-        cols=body.cols,
-    )
-    return JSONResponse(session.to_dict(), status_code=201)
+class TerminalInputRequest(BaseModel):
+    text: str
 
 
 @router.post("", summary="Create a PTY terminal session")
@@ -82,6 +67,19 @@ async def create_terminal(body: CreateTerminalRequest) -> JSONResponse:
 @router.get("", summary="List active terminal sessions")
 async def list_terminals() -> JSONResponse:
     return JSONResponse(terminal_service.list_sessions())
+
+
+@router.post("/{session_id}/input", summary="Send a line of input to a terminal session")
+async def send_terminal_input(session_id: str, body: TerminalInputRequest) -> JSONResponse:
+    """Write text (+ trailing newline, like pressing Enter) into a running
+    session's stdin — for callers that aren't a live WebSocket, e.g. the
+    open_claude_code MCP tool handing a task to an already-open session."""
+    session = get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    text = body.text if body.text.endswith("\n") else body.text + "\n"
+    session.write(text.encode())
+    return JSONResponse({"sent": True})
 
 
 @router.delete("/{session_id}", summary="Close a terminal session")

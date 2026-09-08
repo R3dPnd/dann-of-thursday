@@ -9,8 +9,8 @@ router = APIRouter()
 @router.get("", summary="List available Git projects")
 async def list_projects() -> JSONResponse:
     """Return all Git projects discovered by the Claude Code MCP server."""
-    from src.mcp_servers.claude_code_server import _find_projects
-    projects = _find_projects()
+    from src.mcp_servers.claude_code_server import find_projects
+    projects = find_projects()
     return JSONResponse({"projects": projects, "count": len(projects)})
 
 

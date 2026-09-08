@@ -11,8 +11,10 @@ to skip launching the orchestrator. This is useful when developing the UI
 without audio hardware attached.
 """
 
+import asyncio
 import os
 import threading
+import traceback
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -88,6 +90,25 @@ async def startup_event() -> None:
     bus.subscribe(log_service.record_event)
     bus.subscribe(history_service.record_event)
 
+    # Start the shared MCP manager unconditionally — text chat (app/services/
+    # chat_service.py) needs MCP tools even when NO_VOICE=1 skips the voice
+    # orchestrator. Idempotent: if voice starts afterwards it reuses this
+    # same instance rather than starting a second one.
+    try:
+        from src.config import load_config
+        from src.mcp_client import get_shared_manager
+        config_path = Path(__file__).resolve().parent.parent / "config.yaml"
+        cfg = load_config(config_path)
+        mcp_servers = (cfg.get("mcp") or {}).get("servers") or []
+        if mcp_servers:
+            await asyncio.to_thread(get_shared_manager().start, mcp_servers)
+    except Exception as exc:
+        bus.emit("error", {
+            "module": "mcp",
+            "message": f"Shared MCP manager failed to start: {exc}",
+            "traceback": traceback.format_exc(),
+        })
+
     no_voice = os.environ.get("NO_VOICE", "0").strip() not in ("", "0", "false", "no")
     if not no_voice:
         t = threading.Thread(target=_start_orchestrator, daemon=True, name="orchestrator")
@@ -97,7 +118,12 @@ async def startup_event() -> None:
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     if orchestrator is not None:
-        orchestrator.stop()
+        orchestrator.stop()  # also stops the shared MCP manager
+    else:
+        from src.mcp_client import get_shared_manager
+        mgr = get_shared_manager()
+        if mgr.started:
+            mgr.stop()
 
 
 @app.get("/", tags=["health"])
