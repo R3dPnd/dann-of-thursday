@@ -117,6 +117,51 @@ class TestIsJsonArtifact:
         assert orch._is_json_artifact(text) is False
 
 
+# ── _is_fake_tool_call ────────────────────────────────────────────────────────
+
+class TestIsFakeToolCall:
+    @pytest.mark.parametrize("text", [
+        'The weather in Tacoma is [web_search(query="weather in Tacoma")].',
+        'Let me check that: [ask_claude(question="what is rust")]',
+        '[list_projects()]',
+    ])
+    def test_detects_fake_tool_call(self, orch, text):
+        assert orch._is_fake_tool_call(text) is True
+
+    @pytest.mark.parametrize("text", [
+        "Claude Code is now open in dev-diary.",
+        "The weather is sunny today.",
+        "It's 66 degrees in Tacoma right now.",
+        "",
+    ])
+    def test_passes_normal_text(self, orch, text):
+        assert orch._is_fake_tool_call(text) is False
+
+
+# ── _is_rapid_rewake ──────────────────────────────────────────────────────────
+
+class TestIsRapidRewake:
+    @pytest.mark.parametrize("since_session_end", [0.0, 0.5, 1.5, 2.9])
+    def test_flags_fast_rewake(self, orch, since_session_end):
+        assert orch._is_rapid_rewake(since_session_end) is True
+
+    @pytest.mark.parametrize("since_session_end", [3.0, 5.0, 60.0, None])
+    def test_passes_normal_gap(self, orch, since_session_end):
+        assert orch._is_rapid_rewake(since_session_end) is False
+
+
+# ── _should_give_up ───────────────────────────────────────────────────────────
+
+class TestShouldGiveUp:
+    def test_false_below_threshold(self, orch):
+        orch._consecutive_blank_turns = 3
+        assert orch._should_give_up() is False
+
+    def test_true_at_threshold(self, orch):
+        orch._consecutive_blank_turns = 4
+        assert orch._should_give_up() is True
+
+
 # ── _normalise ────────────────────────────────────────────────────────────────
 
 class TestNormalise:

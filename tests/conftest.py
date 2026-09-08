@@ -4,6 +4,14 @@ import pytest
 
 
 @pytest.fixture()
+def tmp_dann_home(tmp_path, monkeypatch):
+    """Point src.mcp_servers._store's ~/.dann at a scratch dir so MCP module
+    tests never touch the real one."""
+    monkeypatch.setattr("src.mcp_servers._store._DANN_HOME", tmp_path)
+    return tmp_path
+
+
+@pytest.fixture()
 def minimal_config():
     """Minimal config dict that satisfies Orchestrator without touching real hardware."""
     return {
