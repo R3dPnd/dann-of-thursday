@@ -13,12 +13,14 @@ from typing import Any
 
 import numpy as np
 
+from src.agents_config import build_routing_prompt
 from src.audio import play_wav, record_until_silence
 from src.audio.capture import save_wav
 from src.config import load_config
 from src.event_bus import bus
+from src.restart import restart_process
 from src.llm import generate_response, generate_response_streaming
-from src.mcp_client import MCPManager
+from src.mcp_client import MCPManager, get_shared_manager
 from src.stt import transcribe_audio
 from src.stt import warmup as warmup_stt
 from src.tts import synthesize_speech
@@ -69,9 +71,38 @@ _STT_SUBSTITUTIONS: dict[str, str] = {
     "claud code": "claude code",
 }
 
+# Manual, human-spoken restart trigger — deliberately not routed through the
+# LLM/AGENTS system (deterministic regex, like goodbye/code-mode below),
+# both for reliability and because this codebase's own testing found the
+# router model unreliable at literal tool-calling under noisy input.
+_RESTART_RE = re.compile(r"\brestart\s+(?:yourself|dann)\b", re.IGNORECASE)
+
+# The router model occasionally hallucinates a fake tool call as literal text
+# (e.g. "The weather is [web_search(query=\"...\")].") instead of actually
+# invoking the tool via Ollama's structured tool-calling — non-deterministic,
+# more likely with a noisy/rambling transcript. Same class of problem as
+# _is_json_artifact below; same suppress-and-ask-again treatment.
+_FAKE_TOOL_CALL_RE = re.compile(r"\[[a-zA-Z_][a-zA-Z0-9_]*\([^()]*\)\]")
+
+# Default only — override via audio.min_speech_rms in config.yaml. This is
+# genuinely environment-dependent: a sensitive mic in a noisy room can have
+# an ambient noise floor close to this value, causing every ambient sound to
+# be treated as a speech attempt (full STT + an apologetic TTS response)
+# instead of being silently discarded. Measure your room's ambient RMS and
+# tune this above it if "Could not understand" fires on silence.
 _MIN_SPEECH_RMS = 0.005
 _MAX_HISTORY_TURNS = 10      # normal-mode sliding window (user+assistant pairs)
 _MAX_CODE_HISTORY_TURNS = 5  # code-mode context turns passed to ask_claude_code
+
+# A real "ok Dann" from a human this soon after the previous session ended is
+# very unlikely — flag it as a probable false wake trigger (see run()).
+_RAPID_REWAKE_THRESHOLD_S = 3.0
+
+# Give up and end the session after this many consecutive blank/unintelligible
+# turns — otherwise a noisy room can keep Dann "listening" indefinitely,
+# repeatedly recording, transcribing, and apologizing for ambient noise with
+# no way for the user to escape it except an actual "goodbye".
+_MAX_CONSECUTIVE_BLANK_TURNS = 4
 
 
 class Orchestrator:
@@ -82,7 +113,11 @@ class Orchestrator:
         self._audio_cfg = self.config.get("audio", {})
         self._wake_cfg = self.config.get("wake_word", {})
         self._stt_cfg = self.config.get("stt", {})
-        self._ollama_cfg = self.config.get("ollama", {})
+        self._ollama_cfg = dict(self.config.get("ollama", {}))
+        routing_section = build_routing_prompt(self.config.get("agents"))
+        if routing_section:
+            base_prompt = self._ollama_cfg.get("system_prompt", "")
+            self._ollama_cfg["system_prompt"] = f"{base_prompt}\n\n{routing_section}"
         self._tts_cfg = self.config.get("tts", {})
         self._ux_cfg = self.config.get("ux", {})
         self._mcp_cfg = self.config.get("mcp", {})
@@ -92,6 +127,11 @@ class Orchestrator:
         self._running = False
         self._user_paused = False
         self._wake_event = threading.Event()
+        self._wake_score = 0.0
+        self._last_tts_finished_at: float | None = None
+        self._last_session_ended_at: float | None = None
+        self._consecutive_blank_turns = 0
+        self._end_reason = "goodbye"
         self._history: list[dict[str, Any]] = []
         self._code_history: list[dict[str, Any]] = []
         self._mode = SessionMode.NORMAL
@@ -101,7 +141,8 @@ class Orchestrator:
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
-    def _on_wake(self) -> None:
+    def _on_wake(self, score: float = 1.0) -> None:
+        self._wake_score = score
         self._wake_event.set()
 
     # ── Text helpers ──────────────────────────────────────────────────────────
@@ -138,6 +179,15 @@ class Orchestrator:
             return True
         except (json.JSONDecodeError, ValueError):
             return False
+
+    def _is_fake_tool_call(self, text: str) -> bool:
+        return bool(_FAKE_TOOL_CALL_RE.search(text))
+
+    def _is_rapid_rewake(self, since_session_end: float | None) -> bool:
+        return since_session_end is not None and since_session_end < _RAPID_REWAKE_THRESHOLD_S
+
+    def _should_give_up(self) -> bool:
+        return self._consecutive_blank_turns >= _MAX_CONSECUTIVE_BLANK_TURNS
 
     def _format_code_task(self, task: str) -> str:
         """Prepend recent code-mode conversation context to the current task."""
@@ -237,6 +287,7 @@ class Orchestrator:
             speed=self._tts_cfg.get("speed", 1.0),
         )
         play_wav(tts_path, device=self._audio_cfg.get("output_device"))
+        self._last_tts_finished_at = time.monotonic()
         tts_ms = round((time.monotonic() - t0) * 1000)
         bus.emit("turn.tts.done", {"session_id": self._session_id})
         return tts_ms
@@ -281,7 +332,8 @@ class Orchestrator:
             return True
 
         audio_arr = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32767
-        if float(np.sqrt(np.mean(audio_arr ** 2))) < _MIN_SPEECH_RMS:
+        min_speech_rms = self._audio_cfg.get("min_speech_rms", _MIN_SPEECH_RMS)
+        if float(np.sqrt(np.mean(audio_arr ** 2))) < min_speech_rms:
             return True
 
         print("[dann] Transcribing...", flush=True)
@@ -297,7 +349,25 @@ class Orchestrator:
         })
 
         if not text:
-            print("[dann] Could not understand.", flush=True)
+            self._consecutive_blank_turns += 1
+            print(f"[dann] Could not understand ({self._consecutive_blank_turns}/{_MAX_CONSECUTIVE_BLANK_TURNS}).", flush=True)
+            bus.emit("warning", {
+                "module": "stt",
+                "message": f"Could not understand audio ({self._consecutive_blank_turns}/{_MAX_CONSECUTIVE_BLANK_TURNS} consecutive)",
+            })
+
+            if self._should_give_up():
+                print("[dann] Giving up after repeated blank turns — ending session.", flush=True)
+                tts_ms = self._speak("I'm having trouble hearing you clearly — I'll stop listening for now.")
+                self._end_reason = "no_response"
+                bus.emit("metric", {
+                    "session_id": self._session_id,
+                    "mode": self._mode.value,
+                    "stt_ms": stt_ms, "llm_ms": 0, "tts_ms": tts_ms, "code_ms": 0,
+                    "blank": True, "status": "no_response",
+                })
+                return False
+
             tts_ms = self._speak("Sorry, I didn't catch that.")
             bus.emit("metric", {
                 "session_id": self._session_id,
@@ -307,6 +377,7 @@ class Orchestrator:
             })
             return True
 
+        self._consecutive_blank_turns = 0
         text = self._fix_stt(text)
         print(f"[dann] You said: {text}", flush=True)
 
@@ -314,6 +385,7 @@ class Orchestrator:
         if self._is_goodbye(text):
             print("[dann] Session ended.", flush=True)
             tts_ms = self._speak("No problem, chat soon!")
+            self._end_reason = "goodbye"
             bus.emit("metric", {
                 "session_id": self._session_id,
                 "mode": self._mode.value,
@@ -321,6 +393,15 @@ class Orchestrator:
                 "blank": False, "status": "goodbye",
             })
             return False
+
+        # ── Restart ──────────────────────────────────────────────────────────
+        # Manual only — never triggered autonomously by the LLM/any tool, only
+        # by this exact spoken phrase from a human.
+        if _RESTART_RE.search(text):
+            print("[dann] Restarting.", flush=True)
+            self._speak("Okay, restarting now.")
+            self.stop()  # releases the wake-word detector + stops the MCP manager
+            restart_process()
 
         # ── Code mode exit ────────────────────────────────────────────────────
         if self._mode == SessionMode.CODE and _CODE_EXIT_RE.search(text):
@@ -491,6 +572,20 @@ class Orchestrator:
                 })
                 return True
 
+            if self._is_fake_tool_call(response):
+                print(f"[dann] (suppressed hallucinated tool call): {response}", flush=True)
+                bus.emit("warning", {
+                    "module": "orchestrator",
+                    "message": "LLM described a tool call as text instead of calling it; suppressed from TTS.",
+                })
+                tts_ms = self._speak("Sorry, I couldn't complete that. Could you ask again?")
+                bus.emit("metric", {
+                    "session_id": self._session_id,
+                    "mode": "normal", "stt_ms": stt_ms, "llm_ms": llm_ms,
+                    "tts_ms": tts_ms, "code_ms": 0, "blank": False, "status": "fake_tool_call",
+                })
+                return True
+
             print(f"[dann] {response}", flush=True)
             self._history.append({"role": "user", "content": text})
             self._history.append({"role": "assistant", "content": response})
@@ -596,6 +691,8 @@ class Orchestrator:
         self._code_history.clear()
         self._session_id = str(uuid.uuid4())
         self._set_mode(SessionMode.NORMAL, None)
+        self._consecutive_blank_turns = 0
+        self._end_reason = "goodbye"
 
         mode_hint = " Say 'code mode for <project>' to switch to Claude Code mode."
         print(f"[dann] Session started. Say 'thanks Dann' to stop.{mode_hint}", flush=True)
@@ -606,7 +703,7 @@ class Orchestrator:
         try:
             while self._run_turn():
                 pass
-            bus.emit("session.end", {"session_id": self._session_id, "reason": "goodbye"})
+            bus.emit("session.end", {"session_id": self._session_id, "reason": self._end_reason})
         except Exception as e:
             bus.emit("error", {
                 "module": "orchestrator",
@@ -620,6 +717,7 @@ class Orchestrator:
             self._history.clear()
             self._set_mode(SessionMode.NORMAL, None)
             self._session_id = None
+            self._last_session_ended_at = time.monotonic()
             if self._detector and not self._user_paused:
                 self._detector.resume()
 
@@ -630,8 +728,8 @@ class Orchestrator:
         # MCP servers
         mcp_servers = self._mcp_cfg.get("servers") or []
         if mcp_servers:
-            self._mcp = MCPManager()
-            self._mcp.start(mcp_servers)
+            self._mcp = get_shared_manager()
+            self._mcp.start(mcp_servers)  # idempotent — no-op if the FastAPI app already started it
             print("[dann] MCP server ready.", flush=True)
 
         # Wake word detector
@@ -707,7 +805,29 @@ class Orchestrator:
             while self._running:
                 if self._wake_event.wait(timeout=0.5):
                     self._wake_event.clear()
-                    print("[dann] Wake word detected.", flush=True)
+                    now = time.monotonic()
+                    since_tts = (now - self._last_tts_finished_at) if self._last_tts_finished_at is not None else None
+                    since_session_end = (now - self._last_session_ended_at) if self._last_session_ended_at is not None else None
+                    print(f"[dann] Wake word detected (score={self._wake_score:.2f}).", flush=True)
+                    bus.emit("wake.detected", {
+                        "score": self._wake_score,
+                        "since_tts_s": since_tts,
+                        "since_session_end_s": since_session_end,
+                    })
+                    # A session ending and a fresh wake firing seconds later is
+                    # exactly the shape of the mic picking up Dann's own TTS
+                    # output as a false "ok Dann" — genuinely happened live,
+                    # repeatedly, right after a goodbye response. Real user
+                    # wake-ups are almost never this fast after a session ends.
+                    if self._is_rapid_rewake(since_session_end):
+                        bus.emit("warning", {
+                            "module": "wakeword",
+                            "message": (
+                                f"Re-triggered {since_session_end:.1f}s after the previous "
+                                f"session ended (score={self._wake_score:.2f}) — possible TTS "
+                                "echo picked up as a wake word rather than a real request."
+                            ),
+                        })
                     self._run_session()
         except KeyboardInterrupt:
             print("\n[dann] Stopping...", flush=True)

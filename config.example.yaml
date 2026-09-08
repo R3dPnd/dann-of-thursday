@@ -9,6 +9,11 @@ audio:
   silence_timeout_ms: 1500   # stop recording after this much silence
   max_record_ms: 15000       # max recording length
   silence_threshold: 0.01    # RMS below this = silence
+  min_speech_rms: 0.005      # whole-recording RMS below this = discard silently, no STT/TTS
+                             # attempt. Environment-dependent — a sensitive mic in a noisy room
+                             # can have an ambient floor close to the default, causing Dann to
+                             # repeatedly try (and fail) to transcribe background noise. Measure
+                             # your room's ambient RMS and raise this above it if so.
 
 wake_word:
   # openWakeWord: fully offline, no account. Built-in phrases (hey_jarvis,

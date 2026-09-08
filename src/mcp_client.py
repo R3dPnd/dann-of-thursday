@@ -98,13 +98,26 @@ class MCPManager:
         self._sessions: dict[str, ClientSession] = {}
         self._tool_map: dict[str, str] = {}              # tool_name -> server_name
         self._tools: list[dict[str, Any]] = []            # Ollama-formatted tool defs, mutated in place
+        self._start_lock = threading.Lock()
+        self._started = False
 
     # ------------------------------------------------------------------
     # Sync public API
     # ------------------------------------------------------------------
 
     def start(self, server_configs: list[dict[str, Any]]) -> None:
-        """Start background loop, connect always_on servers, register the rest."""
+        """Start background loop, connect always_on servers, register the rest.
+
+        Idempotent — safe to call more than once (e.g. once from the voice
+        orchestrator and once from the FastAPI app when both are using the
+        shared manager from get_shared_manager()); only the first call does
+        anything.
+        """
+        with self._start_lock:
+            if self._started:
+                return
+            self._started = True
+
         self._thread.start()
         for cfg in server_configs:
             self._configs[cfg["name"]] = cfg
@@ -130,6 +143,10 @@ class MCPManager:
                 pass
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join(timeout=5)
+
+    @property
+    def started(self) -> bool:
+        return self._started
 
     @property
     def tools(self) -> list[dict[str, Any]]:
@@ -279,3 +296,23 @@ class MCPManager:
             else:
                 parts.append(str(content))
         return "\n".join(parts) if parts else ""
+
+
+# ── Process-wide shared instance ────────────────────────────────────────────
+#
+# Both the voice orchestrator and text-chat work streams (app/services/
+# chat_service.py) need the same MCP tool set and module state — one set of
+# server processes, not one per consumer. get_shared_manager() returns the
+# same MCPManager regardless of caller; start() is idempotent so whichever
+# caller gets there first actually starts it.
+
+_shared_manager: "MCPManager | None" = None
+_shared_manager_lock = threading.Lock()
+
+
+def get_shared_manager() -> "MCPManager":
+    global _shared_manager
+    with _shared_manager_lock:
+        if _shared_manager is None:
+            _shared_manager = MCPManager()
+        return _shared_manager

@@ -21,3 +21,5 @@ google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.2.0
 torch>=2.0.0  # scripts/train_wakeword.py — trains the custom openWakeWord "ok Dann" model
 onnx>=1.22.0  # scripts/train_wakeword.py — torch.onnx.export(..., dynamo=False) needs this to serialize
+pytest>=8.0.0  # tests/ — run via `.venv/bin/python -m pytest`
+psutil>=6.0.0  # `dann stop` — cross-platform process discovery to reliably kill dann dev/electron/start and any orphaned API/UI children

@@ -18,6 +18,18 @@ import openwakeword.utils as oww_utils
 from openwakeword.model import Model
 
 _BLOCK_SIZE = 1280  # 80 ms at 16 kHz — required by openWakeWord
+# Discard audio for this long after (re)opening the stream. Started at 0.6s
+# to cover the stream-open transient (see _audio_callback), but live testing
+# with mic and speaker on the same monitor showed false wake triggers still
+# landing right at ~0.6s + debounce every time, at max confidence — a
+# feedback/proximity setup like that gives Dann's own TTS output enough
+# volume and clarity at the mic to fool a custom wake model that was never
+# trained against its own synthesized voice. 2.0s comfortably covers a
+# close-range acoustic decay tail; if false triggers persist even at this
+# length, the cause isn't decay time and needs a different fix (e.g. muting
+# input during playback at the OS/device level, or retraining the model with
+# the TTS voice as a negative example).
+_STREAM_WARMUP_S = 2.0
 
 
 def _ensure_onnx_model(model_name: str) -> str:
@@ -54,7 +66,7 @@ class OpenWakeWordDetector:
     def __init__(
         self,
         model_name: str | Path,
-        on_wake: Callable[[], None],
+        on_wake: Callable[[float], None],
         *,
         threshold: float = 0.5,
         debounce: int = 3,
@@ -91,6 +103,7 @@ class OpenWakeWordDetector:
         self._running = False
         self._paused = False
         self._stream: sd.InputStream | None = None
+        self._stream_opened_at = 0.0
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -120,6 +133,7 @@ class OpenWakeWordDetector:
     def _open_stream(self) -> None:
         if self._stream is not None:
             return
+        self._stream_opened_at = time.monotonic()
         self._stream = sd.InputStream(
             channels=1,
             samplerate=self.sample_rate,
@@ -144,6 +158,15 @@ class OpenWakeWordDetector:
         if self._paused or not self._running:
             return
 
+        # Audio hardware commonly produces a brief startup transient/click
+        # when a stream first opens (buffer init, DC bias settling). Scoring
+        # that immediately can misfire the model with high confidence before
+        # any real audio arrives — reproduced live: two false wake triggers,
+        # both ~0.5s after resume() reopened the stream, both score >= 0.99.
+        # Discard audio during a short warm-up window instead of scoring it.
+        if time.monotonic() - self._stream_opened_at < _STREAM_WARMUP_S:
+            return
+
         audio = indata[:, 0]  # shape (1280,) int16
         preds = self._oww.predict(audio)
         score = float(preds.get(self._model_key, 0.0))
@@ -159,6 +182,6 @@ class OpenWakeWordDetector:
             self._last_trigger = now
             self._consecutive = 0
             try:
-                self.on_wake()
+                self.on_wake(score)
             except Exception as e:
                 print(f"[wakeword] callback error: {e}", flush=True)

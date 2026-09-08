@@ -27,6 +27,7 @@ _LEVEL_RANK = {lvl: i for i, lvl in enumerate(LEVELS)}
 _EVENT_LEVEL: dict[str, str] = {
     "session.start": "INFO",
     "session.end": "INFO",
+    "wake.detected": "INFO",
     "state.changed": "INFO",
     "turn.start": "DEBUG",
     "turn.stt": "DEBUG",
@@ -34,6 +35,7 @@ _EVENT_LEVEL: dict[str, str] = {
     "turn.code": "DEBUG",
     "turn.tts": "DEBUG",
     "metric": "DEBUG",
+    "chat.turn": "INFO",
     "error": "ERROR",
     "warning": "WARNING",
 }
@@ -81,6 +83,13 @@ def _message(event_type: str, payload: dict[str, Any]) -> str:
         mode = payload.get("mode", "?")
         proj = payload.get("project")
         return f"Mode → {mode}" + (f" ({proj})" if proj else "")
+    if event_type == "wake.detected":
+        score = payload.get("score")
+        since_end = payload.get("since_session_end_s")
+        parts = [f"score={score:.2f}" if isinstance(score, (int, float)) else "score=?"]
+        if isinstance(since_end, (int, float)):
+            parts.append(f"{since_end:.1f}s after last session ended")
+        return "Wake word detected: " + ", ".join(parts)
     if event_type == "session.start":
         return f"Session started: {payload.get('session_id', '')}"
     if event_type == "session.end":
@@ -98,6 +107,10 @@ def _message(event_type: str, payload: dict[str, Any]) -> str:
             f"Code turn [{payload.get('status', '?')}] "
             f"{payload.get('project', '')} — {payload.get('task', '')[:60]}"
         )
+    if event_type == "chat.turn":
+        ms = payload.get("latency_ms")
+        proj = payload.get("project", "")
+        return f"Chat [{proj}] ({ms} ms): {repr(payload.get('text', '')[:80])}"
     return json.dumps(payload)[:120]
 
 

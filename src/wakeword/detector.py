@@ -8,6 +8,9 @@ import numpy as np
 import pvporcupine
 import sounddevice as sd
 
+_STREAM_WARMUP_S = 2.0  # discard audio for this long after (re)opening the stream — see
+                        # openwakeword_detector.py for why (reproduced there, same mechanism)
+
 
 class WakeWordDetector:
     """Listens for wake word and invokes callback on detection."""
@@ -15,7 +18,7 @@ class WakeWordDetector:
     def __init__(
         self,
         model_path: Path | str | None,
-        on_wake: Callable[[], None],
+        on_wake: Callable[[float], None],
         *,
         access_key: str,
         builtin_keyword: str | None = None,
@@ -63,6 +66,7 @@ class WakeWordDetector:
         self._running = False
         self._paused = False
         self._stream: sd.InputStream | None = None
+        self._stream_opened_at = 0.0
 
     def start(self) -> None:
         """Start listening."""
@@ -95,6 +99,7 @@ class WakeWordDetector:
     def _open_stream(self) -> None:
         if self._stream is not None:
             return
+        self._stream_opened_at = time.monotonic()
         self._stream = sd.InputStream(
             channels=1,
             samplerate=self.sample_rate,
@@ -119,6 +124,9 @@ class WakeWordDetector:
         if self._paused or not self._running:
             return
 
+        if time.monotonic() - self._stream_opened_at < _STREAM_WARMUP_S:
+            return
+
         audio_float = np.clip(indata[:, 0], -1.0, 1.0)
         audio_int16 = (audio_float * 32767).astype(np.int16)
 
@@ -135,6 +143,6 @@ class WakeWordDetector:
             self._last_trigger = now
             self._consecutive = 0
             try:
-                self.on_wake()
+                self.on_wake(1.0)  # Porcupine gives a binary hit, no continuous confidence score
             except Exception as e:
                 print(f"[wakeword] callback error: {e}", flush=True)
