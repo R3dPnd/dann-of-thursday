@@ -50,7 +50,6 @@ def warmup(voice_model: str | Path = "models/piper/en_US-lessac-medium") -> None
 def synthesize_speech(
     text: str,
     *,
-    piper_path: str | None = None,
     voice_model: str | Path = "models/piper/en_US-lessac-medium",
     speed: float = 1.0,
     output_path: Path | None = None,

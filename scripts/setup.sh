@@ -238,7 +238,7 @@ fi
 # ── 4. Ollama (LLM) ─────────────────────────────────────────────────────────
 step "4/5  Ollama (local LLM)"
 explain "Ollama runs the actual language model locally and serves it over
-an HTTP API on localhost:11434 — Dann's src/llm/ollama.py just calls that
+an HTTP API on localhost:11434 — Dann's voice/llm/ollama.py just calls that
 API. Nothing here talks to a cloud model unless you explicitly route a
 question to Claude Code."
 

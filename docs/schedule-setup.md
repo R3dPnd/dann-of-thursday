@@ -1,6 +1,6 @@
 # Schedule Module Setup (Google Calendar)
 
-The `schedule` MCP module (`src/mcp_servers/schedule_server.py`) talks to
+The `schedule` MCP module (`integrations/servers/schedule_server.py`) talks to
 Google Calendar. It's an **on-demand module** (`always_on: false` in
 `config.yaml`) — nothing about it runs until Dann's LLM calls
 `enable_module("schedule")`, and it won't work at all until you complete
@@ -44,7 +44,7 @@ access or delete that file.
 
 Neither `~/.dann/google_credentials.json` nor `~/.dann/google_token.json`
 live in this repo — they're personal, per-machine secrets, kept entirely
-outside git (see `src/mcp_servers/_store.py`).
+outside git (see `integrations/servers/_store.py`).
 
 ## Enabling the module
 

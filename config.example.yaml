@@ -67,7 +67,7 @@ ollama:
 
 tts:
   engine: piper
-  # Uses piper-tts Python API (works on M1 Mac). piper_path unused.
+  # Uses piper-tts Python API (works on M1 Mac).
   voice_model: models/piper/en_US-lessac-medium
   speed: 1.0
 

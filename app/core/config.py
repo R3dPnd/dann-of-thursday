@@ -21,18 +21,6 @@ class Settings(BaseSettings):
     # CORS Configuration
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
-    # Security
-    SECRET_KEY: str = "your-secret-key-change-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-
-    # Database (Optional for future use)
-    DATABASE_URL: Optional[str] = None
-
-    # MCP Configuration
-    MCP_SERVER_URL: Optional[str] = None
-    MCP_TIMEOUT: int = 30
-
     # Cloudflare Access (defense-in-depth JWT check; Access itself gates at
     # the edge, this just stops anything that reaches the box directly, e.g.
     # over Tailscale/LAN, from skipping auth). Leave disabled for pure

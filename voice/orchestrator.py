@@ -282,7 +282,6 @@ class Orchestrator:
         t0 = time.monotonic()
         tts_path = synthesize_speech(
             text,
-            piper_path=self._tts_cfg.get("piper_path", "piper"),
             voice_model=self._tts_cfg.get("voice_model", "models/piper/en_US-lessac-medium"),
             speed=self._tts_cfg.get("speed", 1.0),
         )

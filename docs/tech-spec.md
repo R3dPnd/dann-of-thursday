@@ -34,8 +34,12 @@ Two things are being built on top of that core pipeline:
 ```
 
 ```
-src/            Voice pipeline — wake word → STT → LLM → TTS, orchestrated
-                by src/orchestrator.py, event-driven via src/event_bus.py
+voice/          Voice pipeline — wake word → STT → LLM → TTS, orchestrated
+                by voice/orchestrator.py, event-driven via voice/event_bus.py
+integrations/   MCP client + tool-server modules (projects, schedule, notes,
+                gardening, bjj, devteam, system)
+shared/         Cross-cutting code used by both voice/ and app/ (agent
+                routing config, restart)
 app/            FastAPI backend — serves dashboard state/REST/WebSocket,
                 shares the orchestrator's EventBus so the UI sees every
                 pipeline event live
@@ -55,19 +59,19 @@ surface in the security section below.
 
 | Language | Where | Why |
 |---|---|---|
-| Python 3.10+ | `src/`, `app/`, `scripts/` | Voice/ML ecosystem (Whisper, Piper, ONNX, PyTorch) is Python-first; FastAPI for the backend. **3.10+ is a hard requirement** — the `mcp` package won't install on older Python, and macOS's built-in `python3` (3.9.x) is too old. `scripts/setup.sh` checks for this and installs a newer interpreter via Homebrew if needed. |
+| Python 3.10+ | `voice/`, `integrations/`, `shared/`, `app/`, `scripts/` | Voice/ML ecosystem (Whisper, Piper, ONNX, PyTorch) is Python-first; FastAPI for the backend. **3.10+ is a hard requirement** — the `mcp` package won't install on older Python, and macOS's built-in `python3` (3.9.x) is too old. `scripts/setup.sh` checks for this and installs a newer interpreter via Homebrew if needed. |
 | TypeScript / JavaScript | `ui/` | React dashboard; TypeScript for the type safety a WebSocket-event-driven UI benefits from (event payloads, store shape). |
 | Bash | `scripts/`, `deploy/` | Setup/bootstrap automation — guided local setup, workstation provisioning, launchd service templates. |
 | YAML | `config.yaml`, `.github/workflows/` | Runtime config and CI. |
 
 ## 4. Libraries & Frameworks
 
-### Voice pipeline (`src/`)
+### Voice pipeline (`voice/`)
 
 | Library | Why |
 |---|---|
 | `pvporcupine` | Wake word engine (Picovoice Porcupine). High accuracy, low false-positive rate, and lets you train a custom "ok Dann" acoustic model via a web console with no local ML work. Needs a free Picovoice AccessKey. |
-| `openwakeword` | Alternative wake word engine — fully offline, no account, ONNX-based. `src/wakeword/openwakeword_detector.py` supports it as a drop-in swap via `wake_word.engine` in config. Currently the trained custom model artifact for this engine is missing locally (see §8); the pipeline runs on Porcupine instead. |
+| `openwakeword` | Alternative wake word engine — fully offline, no account, ONNX-based. `voice/wakeword/openwakeword_detector.py` supports it as a drop-in swap via `wake_word.engine` in config. Currently the trained custom model artifact for this engine is missing locally (see §8); the pipeline runs on Porcupine instead. |
 | `sounddevice` | Cross-platform mic capture / speaker playback via PortAudio — needed by every stage that touches raw audio (wake word streaming, STT recording, TTS playback). |
 | `numpy` | Audio buffer math (float↔int16 conversion, RMS silence detection). |
 | `soundfile` | WAV read/write for recorded utterances and synthesized speech. |
@@ -83,10 +87,9 @@ surface in the security section below.
 | `fastapi` | REST + WebSocket API framework — async, automatic OpenAPI docs (`/docs`), used to expose orchestrator state to the dashboard in real time. |
 | `uvicorn[standard]` | ASGI server running FastAPI. |
 | `pydantic-settings` | Typed, env-var-aware settings (`app/core/config.py`) — CORS origins, Cloudflare Access config, etc. all validated at startup rather than read ad hoc. |
-| `mcp` | Model Context Protocol SDK — lets Dann's orchestrator act as an MCP client and drive Claude Code as a tool-using agent (`src/mcp_client.py`, `src/mcp_servers/claude_code_server.py`). This is the mechanism behind `SessionMode.CODE` sessions bypassing Ollama entirely. |
+| `mcp` | Model Context Protocol SDK — lets Dann's orchestrator act as an MCP client and drive Claude Code as a tool-using agent (`integrations/client.py`, `integrations/servers/claude_code_server.py`). This is the mechanism behind `SessionMode.CODE` sessions bypassing Ollama entirely. |
 | `anthropic` | Claude API SDK — used for `ask_claude` routing (general reasoning delegated to Claude rather than the local Ollama model) and by the Claude Code MCP bridge. |
 | `ptyprocess` | Real pseudo-terminal sessions for `terminal_service` — lets the dashboard (and Claude Code sessions) drive an actual shell, not just subprocess calls. |
-| `aiofiles` | Async file I/O in the backend so log/history writes don't block the event loop. |
 | `PyJWT[crypto]` | Verifies Cloudflare Access JWTs (`app/core/cf_access.py`) as a defense-in-depth check when the workstation is exposed remotely — see §7. |
 
 ### Frontend (`ui/`)
