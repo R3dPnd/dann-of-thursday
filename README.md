@@ -75,6 +75,168 @@ WebSocket event stream to the `ui/` React app, which renders live pipeline
 state, project panels, terminal output, and metrics. See
 [docs/ui-spec.md](docs/ui-spec.md) for the dashboard's detailed spec.
 
+## Code tour
+
+New to this codebase? The diagrams below trace how the pieces actually call
+each other, and the reading order at the end is the fastest path to a full
+mental model.
+
+### Module map
+
+```mermaid
+flowchart TB
+    subgraph voice["voice/ — the pipeline"]
+        WW["wakeword/<br/>WakeWordDetector"]
+        AUD["audio/<br/>capture + playback"]
+        STT["stt/whisper.py"]
+        LLMV["llm/ollama.py"]
+        TTS["tts/piper.py"]
+        ORCH["orchestrator.py<br/>Orchestrator"]
+        BUS(["event_bus.py<br/>EventBus"])
+    end
+
+    subgraph shared["shared/ — used by voice/ and app/"]
+        AGENTS["agents_config.py<br/>build_routing_prompt"]
+        RESTART["restart.py"]
+    end
+
+    subgraph integrations["integrations/ — MCP"]
+        MCPC["client.py<br/>MCPManager"]
+        SRV["servers/*.py<br/>projects, schedule, notes,<br/>gardening, bjj, devteam, system"]
+    end
+
+    subgraph app["app/ — FastAPI backend"]
+        MAIN["main.py"]
+        EP["api/v1/endpoints/*.py"]
+        SVC["services/*.py"]
+    end
+
+    subgraph ui["ui/ — React dashboard"]
+        HOOKS["hooks/useDannEvents.ts<br/>useDannState.ts"]
+        COMP["components/*.tsx"]
+    end
+
+    ORCH --> WW
+    ORCH --> AUD
+    ORCH --> STT
+    ORCH --> LLMV
+    ORCH --> TTS
+    ORCH --> AGENTS
+    ORCH --> RESTART
+    ORCH --> MCPC
+    LLMV -.tool calls.-> MCPC
+    MCPC --> SRV
+    ORCH -- emits --> BUS
+
+    MAIN --> ORCH
+    MAIN --> MCPC
+    MAIN --> EP
+    EP --> SVC
+    SVC -- subscribes --> BUS
+
+    EP -. REST + WebSocket .-> HOOKS
+    HOOKS --> COMP
+```
+
+### One voice turn, end to end
+
+This is what happens between "ok Dann" and Dann speaking back — the core
+loop in `voice/orchestrator.py`'s `_run_session()` / `_run_turn()`.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant WW as WakeWordDetector
+    participant O as Orchestrator
+    participant S as voice/stt/whisper.py
+    participant L as voice/llm/ollama.py
+    participant M as MCPManager
+    participant T as voice/tts/piper.py
+    participant B as EventBus
+
+    U->>WW: "ok Dann"
+    WW->>O: on_wake(score)
+    O->>B: emit wake.detected
+    O->>B: emit session.start
+    O->>T: speak("I'm listening.")
+
+    loop until goodbye / restart / blank-turn limit
+        O->>O: _record() — capture until silence
+        O->>S: transcribe_audio(wav)
+        S-->>O: text
+        O->>B: emit turn.stt
+
+        alt goodbye phrase
+            O->>T: speak("chat soon!")
+            O->>B: emit session.end
+        else "code mode for X"
+            O->>M: call_tool(open_claude_code)
+            O->>T: speak(confirmation)
+        else already in code mode
+            O->>M: call_tool(ask_claude_code, task)
+            M-->>O: response
+            O->>B: emit turn.code
+            O->>T: speak(response)
+        else normal mode
+            O->>L: generate_response(text, tools, history)
+            opt model decides to call a tool
+                L->>M: call_tool(name, args)
+                M-->>L: tool result
+            end
+            L-->>O: response text
+            O->>B: emit turn.llm
+            O->>T: speak(response)
+        end
+        O->>B: emit metric
+    end
+```
+
+`SessionMode.CODE` (the middle two branches above) is what "open Claude Code
+in \<project\>" switches into — Ollama is bypassed entirely until you say a
+goodbye phrase or ask to exit code mode.
+
+### How the dashboard sees it live
+
+```mermaid
+flowchart LR
+    BUS(["voice/event_bus.py<br/>EventBus"])
+    MET["metrics_service"]
+    LOG["log_service"]
+    HIST["history_service"]
+    WS["/api/v1/events<br/>WebSocket"]
+    REST["/api/v1/metrics<br/>/api/v1/logs<br/>/api/v1/history"]
+    UI["ui/src<br/>React dashboard"]
+
+    BUS --> MET --> REST
+    BUS --> LOG --> REST
+    BUS --> HIST --> REST
+    BUS --> WS
+    WS --> UI
+    REST --> UI
+```
+
+`app/main.py`'s startup hook subscribes all three services to the same
+`EventBus` the orchestrator emits to — so every `bus.emit(...)` call in
+`orchestrator.py` is simultaneously a log line, a metric, a history entry,
+and a WebSocket push, with no extra plumbing per feature.
+
+### Suggested reading order
+
+1. **This README** + [docs/tech-spec.md](docs/tech-spec.md) — orientation, and *why* each library was chosen.
+2. **`voice/orchestrator.py`** — the state machine everything else plugs into. Start at `run()`, then `_run_session()`, then `_run_turn()`.
+3. **`voice/wakeword/`, `voice/audio/`, `voice/stt/whisper.py`, `voice/tts/piper.py`** — the four pipeline stages the orchestrator calls into, in call order.
+4. **`voice/llm/ollama.py`** + **`shared/agents_config.py`** — how the routing system prompt is built and how tool-calling works.
+5. **`integrations/client.py`** (`MCPManager`) + **`integrations/servers/*.py`** — how tools are actually implemented, and the `list_modules`/`enable_module`/`disable_module` lifecycle.
+6. **`voice/event_bus.py`** — the pub/sub backbone; then look at who subscribes (`app/services/*_service.py`) to see it from the consumer side.
+7. **`app/main.py`** — how the FastAPI backend boots, shares the orchestrator's `EventBus`, and starts the shared MCP manager independently of voice (`NO_VOICE=1`).
+8. **`app/api/v1/router.py`** + **`app/api/v1/endpoints/*.py`** — the REST/WebSocket surface, one file per resource.
+9. **`app/services/*.py`** — the persistence/business logic behind each endpoint (matches 1:1 with the endpoints in most cases).
+10. **`ui/src/hooks/useDannEvents.ts`** and **`useDannState.ts`** — the WebSocket client and Zustand store the whole dashboard reads from, then **`ui/src/components/`**.
+
+`tests/` mirrors this same domain split (`tests/voice/`, `tests/integrations/`,
+etc.) — a good way to confirm your understanding of a module is to read its
+tests right after the module itself.
+
 ## Project layout
 
 ```
