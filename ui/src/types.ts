@@ -32,6 +32,36 @@ export interface Project {
   run?: string
 }
 
+export interface Module {
+  name: string
+  description: string
+  always_on: boolean
+  enabled: boolean
+}
+
+export interface FocusArea {
+  name: string
+  description: string
+  module: string | null
+  module_enabled: boolean | null
+}
+
+export interface FocusAreaNote {
+  filename: string
+  title: string
+  content: string
+  modified_at: number
+}
+
+export interface TerminalSession {
+  session_id: string
+  origin: 'user' | 'dann'
+  focus_area: string | null
+  project: string | null
+  path: string
+  alive: boolean
+}
+
 export interface RunStatus {
   project_name: string
   command: string
@@ -97,7 +127,7 @@ export interface ChatMessage {
 
 export interface WorkStream {
   id: string
-  project: string
+  focus_area: string
   title: string
   created_at: number
   updated_at: number

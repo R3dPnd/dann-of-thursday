@@ -54,7 +54,11 @@ ollama:
     yourself (the "local" agent) or call that agent's tool(s).
 
     Rules:
-    - Never call a tool for conversational filler.
+    - Never call a tool for conversational filler ("ok", "thanks", "sounds
+      good"). DO call a tool whenever the user asks you to do, open, send,
+      save, or relay something — even phrased casually. "tell claude hi" or
+      "tell claude I say hi" means actually call open_terminal with that
+      message; it is not a request to describe what you'd say.
     - After any tool call, speak the result naturally in 1-2 sentences and stop.
     - Never call the same tool twice in one turn.
     - Never use markdown, lists, or code formatting in your own responses.
@@ -63,6 +67,9 @@ ollama:
       list_modules if you're unsure what's available or active.
   temperature: 0.7
   max_tokens: 80
+  keep_alive: 30m # keep the router model resident between turns — on shared/unified
+                  # memory it can otherwise get evicted between wake words and pay a
+                  # full reload on the next turn. Ollama's default is 5m.
 
 
 tts:
@@ -87,12 +94,23 @@ agents:
       needs one sentence and no research.
     enabled: true
 
-  - name: claude_code
-    tools: [list_projects, open_claude_code, ask_claude_code]
+  - name: remember
+    tools: [save_focus_area_note]
     description: >
-      Project-aware work on a specific local git repo — summarize/explain
-      code, check test coverage, or open an interactive session. Needs a
-      project name; use list_projects if unsure what's available.
+      Save something to this focus area's permanent notes, so Dann recalls
+      it automatically in every future conversation here. Use whenever the
+      user says "remember this," "note that down," or "save this," or
+      states a fact/preference/decision worth keeping long-term.
+    enabled: true
+
+  - name: claude_code
+    tools: [list_projects, open_claude_code, ask_claude_code, open_terminal]
+    description: >
+      Claude Code — questions, code review, or an interactive session, on a
+      specific git project by name (use list_projects if unsure), or just
+      to chat with Claude Code directly when there's no project involved
+      (open_terminal). All three are sent to the same watchable dashboard
+      terminal, not answered directly — tell the user to check it.
     enabled: true
 
   - name: claude_reasoning
@@ -143,6 +161,32 @@ agents:
     description: "Local machine control — volume, opening apps, locking the screen. Optional module — enable_module first."
     enabled: true
 
+focus_areas:
+  # Topics you most want Dann to engage on — distinct from mcp.servers
+  # (technical tool+data bundles) and agents (routing targets). Rendered
+  # into a FOCUS AREAS section of the system prompt (see
+  # shared/focus_areas_config.py) so Dann leans into these conversationally.
+  # `module` is optional — set it to an mcp.servers name to note that this
+  # focus area has real data/tools behind it; omit it for a topic that's
+  # purely conversational.
+  - name: gardening
+    description: "Your garden — what's growing, seasonal planning, troubleshooting problems."
+    module: gardening
+    enabled: true
+
+  - name: bjj
+    description: "Your BJJ training — technique, strategy, recovery, competition prep."
+    module: bjj
+    enabled: true
+
+  - name: coding
+    description: "General coding help, tooling, and best practices — not tied to one specific project. Use open_terminal for a live Claude Code session here, or open_claude_code/ask_claude_code by name for a specific project."
+    enabled: true
+
+  - name: security
+    description: "Security research, CTFs, vulnerability analysis, and defensive practices."
+    enabled: true
+
 mcp:
   servers:
     # always_on: true  -> connected at startup, stays up for the session.
@@ -152,6 +196,12 @@ mcp:
       command: .venv/bin/python
       args: ["-m", "integrations.servers.claude_code_server"]
       description: "Project discovery, Claude Code sessions, and web search — all via the claude CLI"
+      always_on: true
+
+    - name: focus_areas
+      command: .venv/bin/python
+      args: ["-m", "integrations.servers.focus_areas_server"]
+      description: "Save notes to a focus area's own context, recalled automatically in future conversations"
       always_on: true
 
     - name: schedule

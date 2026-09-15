@@ -14,6 +14,7 @@ from typing import Any
 import numpy as np
 
 from shared.agents_config import build_routing_prompt
+from shared.focus_areas_config import build_focus_areas_prompt
 from voice.audio import play_wav, record_until_silence
 from voice.audio.capture import save_wav
 from voice.config import load_config
@@ -118,6 +119,10 @@ class Orchestrator:
         if routing_section:
             base_prompt = self._ollama_cfg.get("system_prompt", "")
             self._ollama_cfg["system_prompt"] = f"{base_prompt}\n\n{routing_section}"
+        focus_section = build_focus_areas_prompt(self.config.get("focus_areas"))
+        if focus_section:
+            base_prompt = self._ollama_cfg.get("system_prompt", "")
+            self._ollama_cfg["system_prompt"] = f"{base_prompt}\n\n{focus_section}"
         self._tts_cfg = self.config.get("tts", {})
         self._ux_cfg = self.config.get("ux", {})
         self._mcp_cfg = self.config.get("mcp", {})
@@ -538,6 +543,7 @@ class Orchestrator:
                 tools=mcp_tools,
                 mcp=self._mcp,
                 history=self._history,
+                keep_alive=self._ollama_cfg.get("keep_alive"),
             )
             llm_ms = round((time.monotonic() - t0) * 1000)
             bus.emit("turn.llm", {
@@ -607,6 +613,7 @@ class Orchestrator:
             temperature=self._ollama_cfg.get("temperature", 0.7),
             max_tokens=self._ollama_cfg.get("max_tokens", 80),
             history=self._history,
+            keep_alive=self._ollama_cfg.get("keep_alive"),
         )
 
         response_parts: list[str] = []

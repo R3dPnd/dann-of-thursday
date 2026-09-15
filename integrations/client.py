@@ -75,6 +75,10 @@ _META_TOOLS: list[dict[str, Any]] = [
 ]
 _META_TOOL_NAMES = {t["function"]["name"] for t in _META_TOOLS}
 
+# Tools that declare a `focus_area` parameter meant to be supplied by the
+# caller (see call_tool's session_context), not filled in by the LLM.
+_FOCUS_AREA_AWARE_TOOLS = {"open_claude_code", "ask_claude_code", "open_terminal", "save_focus_area_note"}
+
 
 class MCPManager:
     """Maintains MCP server connections in a background event loop.
@@ -156,11 +160,59 @@ class MCPManager:
         is visible to the caller immediately since this isn't copied."""
         return self._tools
 
-    def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
+    def list_modules(self) -> list[dict[str, Any]]:
+        """Structured module status for the dashboard — one entry per
+        configured MCP server with its always_on flag and whether it's
+        currently connected (always_on modules are connected in start() and
+        read back as enabled here too)."""
+        return [
+            {
+                "name": name,
+                "description": cfg.get("description", ""),
+                "always_on": bool(cfg.get("always_on")),
+                "enabled": name in self._sessions,
+            }
+            for name, cfg in self._configs.items()
+        ]
+
+    def enable_module(self, name: str) -> None:
+        """Synchronous wrapper for the dashboard's enable endpoint — same
+        connect path the enable_module LLM tool uses."""
+        cfg = self._configs.get(name)
+        if cfg is None:
+            raise KeyError(name)
+        if cfg.get("always_on") or name in self._sessions:
+            return
+        self._run(self._connect_one(cfg))
+
+    def disable_module(self, name: str) -> None:
+        """Synchronous wrapper for the dashboard's disable endpoint."""
+        cfg = self._configs.get(name)
+        if cfg is None:
+            raise KeyError(name)
+        if cfg.get("always_on") or name not in self._sessions:
+            return
+        self._run(self._disconnect_one(name))
+
+    def call_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        session_context: dict[str, Any] | None = None,
+    ) -> str:
         """Execute a tool — routed to the owning MCP server, or handled
-        locally if it's one of the module-management meta-tools."""
+        locally if it's one of the module-management meta-tools.
+
+        *session_context* carries caller-known facts the LLM shouldn't be
+        trusted to fill in itself (e.g. which focus area this turn's work
+        stream belongs to) — forced into the call's arguments for the tools
+        that declare a matching parameter, overriding whatever (if anything)
+        the model supplied for it. Not merged in generally: an unexpected
+        argument would fail a tool that doesn't declare it."""
         if tool_name in _META_TOOL_NAMES:
             return self._run(self._handle_meta_tool(tool_name, arguments))
+        if tool_name in _FOCUS_AREA_AWARE_TOOLS and session_context and session_context.get("focus_area"):
+            arguments = {**arguments, "focus_area": session_context["focus_area"]}
         return self._run(self._async_call_tool(tool_name, arguments))
 
     # ------------------------------------------------------------------

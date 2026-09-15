@@ -43,6 +43,7 @@ def generate_response_streaming(
     temperature: float = 0.7,
     max_tokens: int = 150,
     history: list[dict[str, Any]] | None = None,
+    keep_alive: str | int | None = None,
 ) -> Generator[str, None, None]:
     """Stream LLM response, yielding complete sentence chunks as tokens arrive.
 
@@ -69,9 +70,11 @@ def generate_response_streaming(
             "num_predict": max_tokens,
         },
     }
+    if keep_alive is not None:
+        payload["keep_alive"] = keep_alive
 
     buffer = ""
-    with requests.post(url, json=payload, stream=True, timeout=60) as resp:
+    with requests.post(url, json=payload, stream=True, timeout=120) as resp:
         resp.raise_for_status()
         for line in resp.iter_lines():
             if not line:
@@ -104,6 +107,8 @@ def generate_response(
     tools: list[dict[str, Any]] | None = None,
     mcp: MCPManager | None = None,
     history: list[dict[str, Any]] | None = None,
+    keep_alive: str | int | None = None,
+    session_context: dict[str, Any] | None = None,
 ) -> str:
     """Send prompt to Ollama and return generated text.
 
@@ -113,6 +118,10 @@ def generate_response(
 
     *history* is a list of prior ``{"role": ..., "content": ...}`` messages
     from the current session, prepended before the current user turn.
+
+    *session_context* is passed through opaquely to ``mcp.call_tool`` for
+    every tool call this turn makes — see MCPManager.call_tool for what it
+    does with it.
     """
     url = f"{base_url.rstrip('/')}/api/chat"
 
@@ -136,8 +145,14 @@ def generate_response(
         }
         if tools:
             payload["tools"] = tools
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
 
-        resp = requests.post(url, json=payload, timeout=60)
+        # 120s, not 60 — a round after a terminal-routed tool call
+        # (open_claude_code/ask_claude_code/open_terminal) can be feeding
+        # back a large captured-output message, and a cold model load adds
+        # its own real delay on top of that.
+        resp = requests.post(url, json=payload, timeout=120)
         resp.raise_for_status()
         msg = resp.json().get("message", {})
 
@@ -152,7 +167,7 @@ def generate_response(
             args = func.get("arguments", {})
             print(f"[mcp] Calling tool '{name}'...", flush=True)
             try:
-                result = mcp.call_tool(name, args)
+                result = mcp.call_tool(name, args, session_context)
             except Exception as exc:
                 result = f"Error calling {name}: {exc}"
             messages.append({"role": "tool", "content": str(result)})

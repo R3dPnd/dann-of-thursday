@@ -1,4 +1,5 @@
-# Dann's routing brain — a named Ollama model built from qwen2.5:7b-instruct,
+ 
+ thi # Dann's routing brain — a named Ollama model built from qwen2.5:7b-instruct,
 # chosen over llama3.2:3b for stronger structured tool-call/function
 # selection. Build/rebuild with scripts/build_router_model.sh, or directly:
 #   ollama create dann-router -f models/dann-router.Modelfile

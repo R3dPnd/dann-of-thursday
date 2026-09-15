@@ -14,7 +14,6 @@ Exposed tools:
 
 import os
 import re
-import shlex
 import subprocess
 from pathlib import Path
 
@@ -23,11 +22,13 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("claude-code")
 
-# The FastAPI dashboard, when running, owns the browser-visible PTY terminal
-# pool (app/services/terminal_service.py) — open_claude_code targets that so
-# sessions it starts show up live in the dashboard's terminal pane. Falls
-# back to a native Terminal.app window (the old behaviour) when the
-# dashboard isn't running, e.g. plain `python -m voice.main` with no API.
+# open_claude_code targets the FastAPI dashboard's own Claude Code terminal
+# pool (POST /api/v1/terminals/claude-code) when it's reachable, so a session
+# it starts/continues shows up live in the dashboard's terminal pane —
+# specifically the same one the work stream that triggered it is watching,
+# via the focus_area passed alongside. Falls back to a native Terminal.app
+# window when the dashboard isn't running, e.g. plain `python -m voice.main`
+# with no API.
 _API_BASE_URL = os.environ.get("DANN_API_BASE_URL", "http://localhost:8000")
 
 # Directories that are never git repos and may be very large — skip them entirely
@@ -166,54 +167,80 @@ def _open_native_terminal(project: dict, task: str) -> str:
     return msg
 
 
-@mcp.tool()
-def open_claude_code(project_name: str, task: str = "") -> str:
-    """Open an interactive Claude Code session for a project.
+# Server-side, a fresh session waits up to ~15s to clear its startup banner
+# (wait_for_quiet) before a task is even sent, then up to ~25s more for a
+# response or a confirmed-done quiet gap (send_and_capture) — the client
+# timeout has to comfortably exceed the combined worst case.
+_TERMINAL_REQUEST_TIMEOUT = 60
 
-    Use this when the user wants to start a coding session and interact with
-    Claude Code themselves. For getting an answer back immediately, use
-    ask_claude_code instead.
+
+# Terminal output is raw, ANSI-stripped-but-still-noisy TUI text — capping
+# it keeps the router model's next call fast (a long tail here means a
+# bigger prompt, which on a small local model means real added latency, not
+# just a bigger response) and keeps the excerpt focused on the actual
+# answer, which tends to land at the end of the capture rather than the
+# start (spinners/banners/thinking chrome come first).
+_MAX_OUTPUT_CHARS = 1200
+
+
+def _format_terminal_result(data: dict, label: str, task: str) -> str:
+    """Build the tool's return message from a /terminals/claude-code or
+    /terminals/dann response. When Claude Code answered (or made visible
+    progress) within the wait window, that becomes the result to summarize;
+    otherwise it's just confirmation of where to watch."""
+    verb = "Resumed" if data.get("continued") else "Opened"
+    output = (data.get("output") or "").strip()
+    settled = data.get("settled", True)
+
+    if output and len(output) > _MAX_OUTPUT_CHARS:
+        output = "…" + output[-_MAX_OUTPUT_CHARS:]
+
+    if output and settled:
+        return f"Claude Code ({label}): {output}"
+    if output:
+        return (
+            f"Claude Code is still working on this in '{label}' — here's what's "
+            f"come through so far, check the terminal for the rest: {output}"
+        )
+    msg = f"{verb} Claude Code for '{label}' — see the dashboard's terminal pane."
+    if task:
+        msg += f' Task: "{task}"'
+    return msg
+
+
+@mcp.tool()
+def open_claude_code(project_name: str, task: str = "", focus_area: str = "") -> str:
+    """Open an interactive Claude Code session for a project, or hand it a
+    task — the response (or a note that it's still working) is sent to the
+    dashboard's watchable terminal and summarized back to you. Calling this
+    again for the same project resumes that same session rather than
+    starting a fresh one — hand it follow-up tasks the same way you started
+    it.
 
     Args:
         project_name: Name (or partial name) of the project to open.
         task: Optional task description passed to Claude as the initial prompt.
+        focus_area: Do not set this — the caller supplies it automatically.
     """
     project = resolve_project(project_name)
     if not project:
+        if focus_area:
+            # project_name didn't match a real git repo, but we know which
+            # focus area this conversation belongs to — that's not a
+            # codebase, so open a plain terminal for it instead of just
+            # failing and hoping the model retries with the right tool.
+            return open_terminal(task=task, focus_area=focus_area)
         available = ", ".join(p["name"] for p in find_projects())
-        return (
-            f"Project '{project_name}' not found. "
-            f"Available projects: {available or 'none'}"
-        )
+        return f"Project '{project_name}' not found. Available projects: {available or 'none'}."
 
     try:
-        existing = requests.get(f"{_API_BASE_URL}/api/v1/terminals", timeout=5).json()
-        match = next(
-            (s for s in existing if s.get("project_name") == project["name"] and s.get("alive")),
-            None,
+        resp = requests.post(
+            f"{_API_BASE_URL}/api/v1/terminals/claude-code",
+            json={"project_name": project["name"], "task": task, "focus_area": focus_area},
+            timeout=_TERMINAL_REQUEST_TIMEOUT,
         )
-
-        if match:
-            if task:
-                requests.post(
-                    f"{_API_BASE_URL}/api/v1/terminals/{match['session_id']}/input",
-                    json={"text": task},
-                    timeout=5,
-                )
-                return f"Claude Code is already open for '{project['name']}' — sent it your task."
-            return f"Claude Code is already open for '{project['name']}' — see the dashboard's terminal pane."
-
-        command = f"claude {shlex.quote(task)}" if task else "claude"
-        requests.post(
-            f"{_API_BASE_URL}/api/v1/terminals",
-            json={"project_name": project["name"], "command": command},
-            timeout=10,
-        ).raise_for_status()
-        msg = f"Opened Claude Code in '{project['name']}' — see the dashboard's terminal pane."
-        if task:
-            msg += f' Starting with: "{task}"'
-        return msg
-
+        resp.raise_for_status()
+        return _format_terminal_result(resp.json(), project["name"], task)
     except requests.RequestException:
         # Dashboard API not running (e.g. standalone voice mode) — fall back
         # to a real Terminal.app window so this still works either way.
@@ -221,44 +248,51 @@ def open_claude_code(project_name: str, task: str = "") -> str:
 
 
 @mcp.tool()
-def ask_claude_code(project_name: str, task: str) -> str:
-    """Ask Claude Code a question about a project and get the answer back.
-
-    Runs Claude Code non-interactively and returns its response so it can
-    be spoken aloud. Use this for questions like "summarise the project",
-    "what does this function do", or "what tests are missing".
-
-    For starting an interactive session where the user drives the conversation,
-    use open_claude_code instead.
+def open_terminal(task: str = "", focus_area: str = "") -> str:
+    """Open or continue an interactive Claude Code terminal for the current
+    conversation, when the user asks to use "the terminal" or "Claude Code"
+    but there's no specific git project involved — e.g. a focus area that's
+    a hobby or interest (BJJ, gardening), not a codebase. The response (or a
+    note that it's still working) is sent to the dashboard's watchable
+    terminal and summarized back to you. Calling this again in the same
+    conversation resumes that same terminal rather than starting a fresh
+    one. For work on an actual project, use open_claude_code instead.
 
     Args:
-        project_name: Name (or partial name) of the project to query.
-        task: The question or instruction for Claude Code.
+        task: What to ask/tell Claude Code once the terminal is open.
+        focus_area: Do not set this — the caller supplies it automatically.
     """
-    project = resolve_project(project_name)
-    if not project:
-        available = ", ".join(p["name"] for p in find_projects())
-        return (
-            f"Project '{project_name}' not found. "
-            f"Available projects: {available or 'none'}"
+    if not focus_area:
+        return "No terminal available — this conversation isn't tied to a focus area."
+
+    try:
+        resp = requests.post(
+            f"{_API_BASE_URL}/api/v1/terminals/dann",
+            json={"focus_area": focus_area, "task": task},
+            timeout=_TERMINAL_REQUEST_TIMEOUT,
         )
+        resp.raise_for_status()
+        return _format_terminal_result(resp.json(), focus_area, task)
+    except requests.RequestException:
+        return "Could not open a terminal — the dashboard isn't reachable."
 
-    proj_path = project["path"]
 
-    result = subprocess.run(
-        ["claude", "-p", task],
-        cwd=proj_path,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+@mcp.tool()
+def ask_claude_code(project_name: str, task: str, focus_area: str = "") -> str:
+    """Ask Claude Code something about a project — sent to the same live
+    terminal open_claude_code uses, so the user can watch it answer, rather
+    than a hidden one-shot call. Use this for questions like "summarise the
+    project", "what does this function do", or "what tests are missing".
+    Same underlying terminal as open_claude_code — calling either for the
+    same project/focus area continues the same conversation. The answer is
+    not returned directly here; tell the user to check the terminal pane.
 
-    if result.returncode != 0:
-        err = result.stderr.strip()
-        return f"Claude Code returned an error: {err or 'unknown error'}"
-
-    output = result.stdout.strip()
-    return output if output else "Claude Code returned an empty response."
+    Args:
+        project_name: Name (or partial name) of the project to ask about.
+        task: The question or instruction for Claude Code.
+        focus_area: Do not set this — the caller supplies it automatically.
+    """
+    return open_claude_code(project_name, task, focus_area)
 
 
 @mcp.tool()

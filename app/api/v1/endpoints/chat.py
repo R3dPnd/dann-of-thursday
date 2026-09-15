@@ -1,11 +1,12 @@
 """
-Text-chat work streams — one per project, same Ollama+MCP routing brain as
-voice, driven by typed text. See app/services/chat_service.py.
+Text-chat work streams — one per focus area, same Ollama+MCP routing brain
+as voice, driven by typed text. See app/services/chat_service.py.
 
 POST   /api/v1/chat/streams              — create a work stream
 GET    /api/v1/chat/streams              — list work streams
 GET    /api/v1/chat/streams/{id}         — stream detail + message history
 POST   /api/v1/chat/streams/{id}/messages — send a message, get the response
+POST   /api/v1/chat/streams/{id}/clear   — wipe message history, keep the stream
 DELETE /api/v1/chat/streams/{id}         — delete a work stream
 """
 from __future__ import annotations
@@ -22,7 +23,7 @@ router = APIRouter()
 
 
 class CreateStreamRequest(BaseModel):
-    project: str
+    focus_area: str
     title: str | None = None
 
 
@@ -33,12 +34,12 @@ class SendMessageRequest(BaseModel):
 @router.post("/streams", summary="Create a work stream")
 async def create_stream(body: CreateStreamRequest) -> JSONResponse:
     try:
-        stream = chat_service.create_stream(body.project, body.title or "")
+        stream = chat_service.create_stream(body.focus_area, body.title or "")
     except chat_service.UnknownStreamError:
-        available = ", ".join(p["name"] for p in chat_service.list_projects())
+        available = ", ".join(a["name"] for a in chat_service.list_focus_areas())
         raise HTTPException(
             status_code=404,
-            detail=f"Unknown project '{body.project}'. Available: {available or 'none'}",
+            detail=f"Unknown focus area '{body.focus_area}'. Available: {available or 'none'}",
         )
     return JSONResponse(stream)
 
@@ -66,6 +67,15 @@ async def send_message(stream_id: str, body: SendMessageRequest) -> JSONResponse
     except chat_service.UnknownStreamError:
         raise HTTPException(status_code=404, detail=f"Unknown work stream: {stream_id}")
     return JSONResponse(result)
+
+
+@router.post("/streams/{stream_id}/clear", summary="Clear a work stream's message history")
+async def clear_stream(stream_id: str) -> JSONResponse:
+    try:
+        stream = chat_service.clear_stream(stream_id)
+    except chat_service.UnknownStreamError:
+        raise HTTPException(status_code=404, detail=f"Unknown work stream: {stream_id}")
+    return JSONResponse(stream)
 
 
 @router.delete("/streams/{stream_id}", summary="Delete a work stream")

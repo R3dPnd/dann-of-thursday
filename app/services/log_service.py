@@ -109,8 +109,8 @@ def _message(event_type: str, payload: dict[str, Any]) -> str:
         )
     if event_type == "chat.turn":
         ms = payload.get("latency_ms")
-        proj = payload.get("project", "")
-        return f"Chat [{proj}] ({ms} ms): {repr(payload.get('text', '')[:80])}"
+        focus_area = payload.get("focus_area", "")
+        return f"Chat [{focus_area}] ({ms} ms): {repr(payload.get('text', '')[:80])}"
     return json.dumps(payload)[:120]
 
 

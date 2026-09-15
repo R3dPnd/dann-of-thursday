@@ -38,15 +38,15 @@ export function StatusBar() {
   const project = useDannStore((s) => s.project)
   const wsConnected = useDannStore((s) => s.wsConnected)
   const pipelineStage = useDannStore((s) => s.pipelineStage)
+  const modules = useDannStore((s) => s.modules)
   const cfg = modeConfig(mode, project)
   const stage = STAGE_CONFIG[pipelineStage]
   const [restarting, setRestarting] = useState(false)
 
-  const scrollToActive = () => {
-    if (project) {
-      document.getElementById(`project-${project}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }
-  }
+  // Always-on modules (currently just "projects") are foundational, not
+  // interesting to call out here — this is specifically "what did Dann
+  // start up on demand for this conversation."
+  const activeModules = modules.filter((m) => m.enabled && !m.always_on)
 
   const handleRestart = async () => {
     if (!window.confirm('Restart Dann? This will drop any active voice session and reconnect the dashboard.')) return
@@ -65,15 +65,14 @@ export function StatusBar() {
 
       {/* Centre: mode pill + pipeline stage */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={scrollToActive}
-          className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${cfg.pillClass} ${mode === 'code' ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+        <span
+          className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${cfg.pillClass}`}
         >
           {cfg.dot && (
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-300 pulse-dot" />
           )}
           {cfg.label}
-        </button>
+        </span>
 
         {stage.label && (
           <span className={`text-xs font-medium ${stage.color} animate-pulse`}>
@@ -82,8 +81,22 @@ export function StatusBar() {
         )}
       </div>
 
-      {/* Right: restart + WS connection indicator */}
+      {/* Right: active modules + restart + WS connection indicator */}
       <div className="flex items-center gap-3">
+        {activeModules.length > 0 && (
+          <div className="flex items-center gap-1.5" title="Modules Dann currently has active">
+            {activeModules.map((m) => (
+              <span
+                key={m.name}
+                className="flex items-center gap-1 rounded-full bg-blue-950/40 px-2 py-0.5 text-[10px] text-blue-300"
+              >
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 pulse-dot" />
+                {m.name}
+              </span>
+            ))}
+          </div>
+        )}
+
         <button
           onClick={handleRestart}
           disabled={restarting}

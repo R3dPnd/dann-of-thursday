@@ -1,4 +1,4 @@
-import type { DevTeamJob, LogEntry, MetricSummary, Project, RunStatus, StateSnapshot, PromptBuilderResult, WorkStream } from '../types'
+import type { DevTeamJob, FocusArea, FocusAreaNote, LogEntry, MetricSummary, Module, Project, PromptBuilderResult, StateSnapshot, TerminalSession, WorkStream } from '../types'
 
 const BASE = '/api/v1'
 
@@ -21,11 +21,29 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 export const api = {
   getState: () => get<StateSnapshot>('/state'),
 
-  getProjects: () =>
-    get<{ projects: Project[]; count: number }>('/projects').then(r => r.projects),
-
   getNotes: () =>
     get<{ notes: Project[]; count: number }>('/notes').then(r => r.notes),
+
+  getModules: () =>
+    get<{ modules: Module[] }>('/modules').then(r => r.modules),
+
+  enableModule: (name: string) =>
+    post<{ module: string; enabled: boolean }>(`/modules/${encodeURIComponent(name)}/enable`),
+
+  disableModule: (name: string) =>
+    post<{ module: string; enabled: boolean }>(`/modules/${encodeURIComponent(name)}/disable`),
+
+  getFocusAreas: () =>
+    get<{ focus_areas: FocusArea[] }>('/focus-areas').then(r => r.focus_areas),
+
+  getFocusAreaNotes: (name: string) =>
+    get<{ notes: FocusAreaNote[] }>(`/focus-areas/${encodeURIComponent(name)}/notes`).then(r => r.notes),
+
+  createFocusAreaNote: (name: string, content: string, title?: string) =>
+    post<FocusAreaNote>(`/focus-areas/${encodeURIComponent(name)}/notes`, { content, ...(title ? { title } : {}) }),
+
+  deleteFocusAreaNote: (name: string, filename: string) =>
+    fetch(`/api/v1/focus-areas/${encodeURIComponent(name)}/notes/${encodeURIComponent(filename)}`, { method: 'DELETE' }),
 
   openProject: (name: string) =>
     post<{ result: string }>(`/projects/${encodeURIComponent(name)}/open`),
@@ -39,13 +57,12 @@ export const api = {
   getByProject: () =>
     get<{ project: string; total: number; ok: number; error: number; empty: number; avg_response_ms: number | null }[]>('/metrics/by-project'),
 
-  listTerminals: () =>
-    get<{ session_id: string; project_name: string; project_path: string; alive: boolean }[]>('/terminals'),
+  listTerminals: () => get<TerminalSession[]>('/terminals'),
 
-  createTerminal: (projectName: string, rows = 40, cols = 120, command?: string) =>
-    post<{ session_id: string; project_name: string; project_path: string; alive: boolean }>(
+  createTerminal: (focusArea: string, rows = 40, cols = 120, command?: string) =>
+    post<TerminalSession>(
       '/terminals',
-      { project_name: projectName, rows, cols, ...(command ? { command } : {}) },
+      { focus_area: focusArea, rows, cols, ...(command ? { command } : {}) },
     ),
 
   closeTerminal: (sessionId: string) =>
@@ -60,22 +77,21 @@ export const api = {
   enableVoice: () => post<{ listening: boolean }>('/voice/enable'),
   disableVoice: () => post<{ listening: boolean }>('/voice/disable'),
 
-  getRunStatus: (name: string) => get<RunStatus>(`/runs/${encodeURIComponent(name)}/status`),
-  startRun: (name: string) => post<RunStatus>(`/runs/${encodeURIComponent(name)}/start`),
-  stopRun: (name: string) => post<{ status: string; project_name: string }>(`/runs/${encodeURIComponent(name)}/stop`),
-
   buildPrompt: (body: { thoughts: string; goals: string; notes: string; custom_sections: { title: string; content: string }[] }) =>
     post<PromptBuilderResult>('/prompt-builder', body),
 
   listStreams: () => get<{ streams: WorkStream[] }>('/chat/streams').then(r => r.streams),
 
-  createStream: (project: string, title?: string) =>
-    post<WorkStream>('/chat/streams', { project, ...(title ? { title } : {}) }),
+  createStream: (focusArea: string, title?: string) =>
+    post<WorkStream>('/chat/streams', { focus_area: focusArea, ...(title ? { title } : {}) }),
 
   getStream: (id: string) => get<WorkStream>(`/chat/streams/${encodeURIComponent(id)}`),
 
   sendChatMessage: (id: string, text: string) =>
     post<{ response: string; latency_ms: number }>(`/chat/streams/${encodeURIComponent(id)}/messages`, { text }),
+
+  clearStream: (id: string) =>
+    post<WorkStream>(`/chat/streams/${encodeURIComponent(id)}/clear`),
 
   deleteStream: (id: string) =>
     fetch(`/api/v1/chat/streams/${encodeURIComponent(id)}`, { method: 'DELETE' }),

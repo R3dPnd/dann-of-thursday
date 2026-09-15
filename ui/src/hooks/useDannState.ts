@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CodeTurn, LogEntry, MetricSummary, Mode, PipelineStage, Project, RawEvent, StateSnapshot, VoiceTurn } from '../types'
+import type { CodeTurn, FocusArea, LogEntry, MetricSummary, Mode, Module, PipelineStage, Project, RawEvent, StateSnapshot, TerminalSession, VoiceTurn } from '../types'
 
 const MAX_LOG_ENTRIES = 2000
 const MAX_VOICE_TURNS = 200
@@ -36,9 +36,18 @@ interface DannStore {
   _pendingStt: string | null
   liveResponse: string
 
-  // Projects
-  projects: Project[]
+  // Note repositories
   noteProjects: Project[]
+
+  // MCP modules
+  modules: Module[]
+
+  // Focus areas — topics the user wants Dann to engage on
+  focusAreas: FocusArea[]
+
+  // PTY terminal sessions (app-wide, not tied to whichever tab is open —
+  // see components/TerminalIndicator.tsx)
+  terminals: TerminalSession[]
 
   // Voice conversation history
   voiceTurns: VoiceTurn[]
@@ -64,8 +73,11 @@ interface DannStore {
   applySnapshot: (snapshot: StateSnapshot) => void
   applyEvent: (type: string, payload: Record<string, unknown>) => void
   setWsConnected: (connected: boolean) => void
-  setProjects: (projects: Project[]) => void
   setNoteProjects: (notes: Project[]) => void
+  setModules: (modules: Module[]) => void
+  setModuleEnabled: (name: string, enabled: boolean) => void
+  setFocusAreas: (areas: FocusArea[]) => void
+  setTerminals: (terminals: TerminalSession[]) => void
   setMetricSummary: (summary: MetricSummary) => void
   clearUnreadErrors: () => void
   prependTurns: (turns: VoiceTurn[]) => void
@@ -88,8 +100,10 @@ export const useDannStore = create<DannStore>((set) => ({
   stageEnteredAt: Date.now(),
   _pendingStt: null,
   liveResponse: '',
-  projects: [],
   noteProjects: [],
+  modules: [],
+  focusAreas: [],
+  terminals: [],
   voiceTurns: [],
   codeHistory: {},
   metricSummary: null,
@@ -299,8 +313,13 @@ export const useDannStore = create<DannStore>((set) => ({
   },
 
   setWsConnected: (connected) => set({ wsConnected: connected }),
-  setProjects:    (projects)  => set({ projects }),
   setNoteProjects:(notes)     => set({ noteProjects: notes }),
+  setModules:     (modules)   => set({ modules }),
+  setModuleEnabled: (name, enabled) => set((s) => ({
+    modules: s.modules.map((m) => m.name === name ? { ...m, enabled } : m),
+  })),
+  setFocusAreas: (areas) => set({ focusAreas: areas }),
+  setTerminals: (terminals) => set({ terminals }),
   setMetricSummary:(summary)  => set({ metricSummary: summary }),
   clearUnreadErrors: ()       => set({ unreadErrors: 0 }),
   // Dedupe by id — VoicePanel's history-load effect can fire more than once

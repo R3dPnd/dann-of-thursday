@@ -1,54 +1,36 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { useDannEvents } from './hooks/useDannEvents'
 import { useFocusModeShortcut } from './hooks/useFocusModeShortcut'
 import { useDannStore } from './hooks/useDannState'
 import { StatusBar } from './components/StatusBar'
-import { ProjectPanel } from './components/ProjectPanel'
+import { ModulesPanel } from './components/ModulesPanel'
+import { FocusAreasPanel } from './components/FocusAreasPanel'
 import LogPanel from './components/LogPanel'
 import { LeftNav } from './components/LeftNav'
 import { VoicePanel } from './components/VoicePanel'
 import { VoiceWidget } from './components/VoiceWidget'
+import { TerminalIndicator } from './components/TerminalIndicator'
 import { FocusMode } from './components/focus/FocusMode'
-import { api } from './lib/api'
-import type { TerminalPaneHandle } from './components/TerminalPane'
 
 // Lazy-load heavy components
 const MetricsPage = lazy(() => import('./components/MetricsPage'))
-const TerminalPane = lazy(() => import('./components/TerminalPane'))
-const RunOutputPane = lazy(() => import('./components/RunOutputPane'))
 const NotesPanel = lazy(() => import('./components/NotesPanel').then(m => ({ default: m.NotesPanel })))
-const ChatPanel = lazy(() => import('./components/ChatPanel')) // the main "DANN" tab: chat + per-project terminal
+const ChatPanel = lazy(() => import('./components/ChatPanel')) // the main "DANN" tab: chat + per-focus-area terminal
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
+// Terminals live inside the DANN tab now (one per active work stream's focus
+// area, see ChatPanel) — there's no standalone terminal-tab system anymore
+// since the two panels that used to open one (Projects, Notes) either no
+// longer exist or no longer map onto a focus area.
 
-interface TerminalTab {
-  kind: 'terminal'
-  id: string
-  sessionId: string
-  projectName: string
-}
-
-interface RunTab {
-  kind: 'run'
-  id: string
-  projectName: string
-}
-
-type StaticTab = 'dann' | 'projects' | 'notes' | 'metrics'
-type Tab = StaticTab | TerminalTab | RunTab
-
-function tabId(t: Tab): string {
-  if (typeof t === 'string') return t
-  return t.id
-}
+type Tab = 'dann' | 'focus' | 'modules' | 'notes' | 'metrics'
 
 function tabLabel(t: Tab): string {
   if (t === 'dann') return 'DANN'
-  if (t === 'projects') return 'Projects'
+  if (t === 'focus') return 'Focus Areas'
+  if (t === 'modules') return 'Modules'
   if (t === 'notes') return 'Notes'
-  if (t === 'metrics') return 'Metrics'
-  if (t.kind === 'run') return `▶ ${t.projectName}`
-  return t.projectName
+  return 'Metrics'
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -60,80 +42,8 @@ export default function App() {
   const focusMode = useDannStore(s => s.focusMode)
   const setFocusMode = useDannStore(s => s.setFocusMode)
 
-  const [tabs, setTabs] = useState<Tab[]>(['dann', 'projects', 'notes', 'metrics'])
-  const [activeTabId, setActiveTabId] = useState<string>('dann')
-  const terminalRefs = useRef<Map<string, React.RefObject<TerminalPaneHandle>>>(new Map())
-
-  // On mount: reconnect to any project terminal sessions the backend still
-  // has alive (survives page refresh). The DANN tab's own terminal (per
-  // work-stream project) is looked up by ChatPanel itself, not here.
-  useEffect(() => {
-    api.listTerminals().then((sessions) => {
-      for (const s of sessions) {
-        if (!s.alive) continue
-        const tab: TerminalTab = {
-          kind: 'terminal',
-          id: `term-${s.session_id}`,
-          sessionId: s.session_id,
-          projectName: s.project_name,
-        }
-        terminalRefs.current.set(tab.id, { current: null } as React.RefObject<TerminalPaneHandle>)
-        setTabs((prev) => {
-          if (prev.some((t): t is TerminalTab => typeof t !== 'string' && t.kind === 'terminal' && (t as TerminalTab).sessionId === s.session_id)) return prev
-          return [...prev, tab]
-        })
-      }
-    }).catch(() => {})
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const openTerminal = async (projectName: string, command?: string) => {
-    // If a terminal tab for this project already exists, just switch to it
-    const existing = tabs.find(
-      (t): t is TerminalTab => typeof t !== 'string' && t.projectName === projectName
-    )
-    if (existing) {
-      setActiveTabId(existing.id)
-      return
-    }
-
-    try {
-      // Ask the backend to create a PTY session
-      const session = await api.createTerminal(projectName, 40, 120, command)
-      const newTab: TerminalTab = {
-        kind: 'terminal',
-        id: `term-${session.session_id}`,
-        sessionId: session.session_id,
-        projectName,
-      }
-      terminalRefs.current.set(newTab.id, { current: null } as React.RefObject<TerminalPaneHandle>)
-      setTabs((prev) => [...prev, newTab])
-      setActiveTabId(newTab.id)
-    } catch (err) {
-      console.error('Failed to open terminal for', projectName, err)
-    }
-  }
-
-  const closeTab = (tab: TerminalTab | RunTab) => {
-    if (tab.kind === 'terminal') {
-      api.closeTerminal(tab.sessionId).catch(() => {})
-      terminalRefs.current.delete(tab.id)
-    }
-    setTabs((prev) => prev.filter((t) => tabId(t) !== tab.id))
-    if (activeTabId === tab.id) setActiveTabId('projects')
-  }
-
-  const openRunOutput = (projectName: string) => {
-    const existing = tabs.find(
-      (t): t is RunTab => typeof t !== 'string' && t.kind === 'run' && t.projectName === projectName
-    )
-    if (existing) {
-      setActiveTabId(existing.id)
-      return
-    }
-    const newTab: RunTab = { kind: 'run', id: `run-${projectName}`, projectName }
-    setTabs((prev) => [...prev, newTab])
-    setActiveTabId(newTab.id)
-  }
+  const tabs: Tab[] = ['dann', 'focus', 'modules', 'notes', 'metrics']
+  const [activeTabId, setActiveTabId] = useState<Tab>('dann')
 
   return (
     <>
@@ -143,22 +53,18 @@ export default function App() {
       {/* Tab bar */}
       <nav className="flex items-end border-b border-gray-800 bg-gray-900 px-2 overflow-x-auto shrink-0">
         {tabs.map((tab) => {
-          const id = tabId(tab)
-          const isActive = id === activeTabId
-
-          const isCloseable = typeof tab !== 'string'
-          const isRunTab = typeof tab !== 'string' && tab.kind === 'run'
+          const isActive = tab === activeTabId
           const isDannTab = tab === 'dann'
 
           return (
             <div
-              key={id}
+              key={tab}
               className={`group flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px cursor-pointer whitespace-nowrap transition-colors ${
                 isActive
                   ? isDannTab ? 'border-teal-400 text-teal-300' : 'border-blue-500 text-white'
                   : isDannTab ? 'border-transparent text-teal-600 hover:text-teal-400' : 'border-transparent text-gray-400 hover:text-gray-200'
               }`}
-              onClick={() => setActiveTabId(id)}
+              onClick={() => setActiveTabId(tab)}
             >
               {isDannTab && (
                 <span className="text-[10px] font-mono text-teal-500">{'>'}_</span>
@@ -172,22 +78,7 @@ export default function App() {
                   ⛶
                 </button>
               )}
-              {!isDannTab && !isRunTab && typeof tab !== 'string' && (
-                <span className="text-[10px] text-emerald-400 font-mono">{'>'}_</span>
-              )}
-              {isRunTab && (
-                <span className="text-[10px] text-green-400">▶</span>
-              )}
               {tabLabel(tab)}
-              {isCloseable && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); closeTab(tab as TerminalTab | RunTab) }}
-                  className="ml-1 text-gray-600 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity leading-none"
-                  title="Close"
-                >
-                  ×
-                </button>
-              )}
             </div>
           )
         })}
@@ -200,23 +91,29 @@ export default function App() {
       {/* Tab content — all panels stacked absolutely so display:none never nukes canvas contexts */}
       <main className="flex-1 overflow-hidden relative">
 
-        {/* DANN — chat with Dann + the live terminal for whichever project's work stream is active */}
+        {/* DANN — chat with Dann + the live terminal for whichever work stream's focus area is active */}
         <div className={`absolute inset-0 overflow-hidden ${activeTabId === 'dann' ? '' : 'opacity-0 pointer-events-none'}`}>
           <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Loading…</div>}>
             <ChatPanel />
           </Suspense>
         </div>
 
-        <div className={`absolute inset-0 overflow-y-auto ${activeTabId === 'projects' ? '' : 'opacity-0 pointer-events-none'}`}>
+        <div className={`absolute inset-0 overflow-y-auto ${activeTabId === 'focus' ? '' : 'opacity-0 pointer-events-none'}`}>
           <div className="mx-auto max-w-4xl px-4 py-4">
-            <ProjectPanel onOpenTerminal={openTerminal} onRunOpened={openRunOutput} />
+            <FocusAreasPanel />
+          </div>
+        </div>
+
+        <div className={`absolute inset-0 overflow-y-auto ${activeTabId === 'modules' ? '' : 'opacity-0 pointer-events-none'}`}>
+          <div className="mx-auto max-w-4xl px-4 py-4">
+            <ModulesPanel />
           </div>
         </div>
 
         <div className={`absolute inset-0 overflow-y-auto ${activeTabId === 'notes' ? '' : 'opacity-0 pointer-events-none'}`}>
           <div className="mx-auto max-w-4xl px-4 py-4">
             <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Loading…</div>}>
-              <NotesPanel onOpenTerminal={openTerminal} />
+              <NotesPanel />
             </Suspense>
           </div>
         </div>
@@ -226,38 +123,6 @@ export default function App() {
             <MetricsPage />
           </Suspense>
         </div>
-
-        {/* Terminal tabs */}
-        {tabs.filter((t): t is TerminalTab => typeof t !== 'string' && t.kind === 'terminal').map((tab) => (
-          <div
-            key={tab.id}
-            className={`absolute inset-0 p-2 ${activeTabId === tab.id ? 'z-10' : 'opacity-0 pointer-events-none'}`}
-          >
-            <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Opening terminal…</div>}>
-              <TerminalPane
-                ref={terminalRefs.current.get(tab.id) ?? null}
-                sessionId={tab.sessionId}
-                isActive={activeTabId === tab.id}
-                onExit={() => closeTab(tab)}
-              />
-            </Suspense>
-          </div>
-        ))}
-
-        {/* Run output tabs */}
-        {tabs.filter((t): t is RunTab => typeof t !== 'string' && t.kind === 'run').map((tab) => (
-          <div
-            key={tab.id}
-            className={`absolute inset-0 p-2 ${activeTabId === tab.id ? 'z-10' : 'invisible pointer-events-none'}`}
-          >
-            <Suspense fallback={<div className="p-8 text-gray-500 text-sm">Connecting…</div>}>
-              <RunOutputPane
-                projectName={tab.projectName}
-                onExit={() => closeTab(tab)}
-              />
-            </Suspense>
-          </div>
-        ))}
       </main>
 
       {/* Permanent voice panel — always visible right sidebar */}
@@ -266,6 +131,7 @@ export default function App() {
 
       <VoiceWidget />
       <LogPanel />
+      <TerminalIndicator />
     </div>
     <FocusMode active={focusMode} onExit={() => setFocusMode(false)} />
     </>

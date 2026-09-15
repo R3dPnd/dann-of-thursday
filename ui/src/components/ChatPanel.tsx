@@ -1,8 +1,6 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import type { ChatMessage, Project, WorkStream } from '../types'
-
-const TerminalPane = lazy(() => import('./TerminalPane'))
+import type { ChatMessage, FocusArea, WorkStream } from '../types'
 
 function relTime(ms: number): string {
   const diff = (Date.now() - ms) / 1000
@@ -27,26 +25,26 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 }
 
 function NewStreamForm({
-  projects,
+  focusAreas,
   onCreate,
   onCancel,
 }: {
-  projects: Project[]
-  onCreate: (project: string, title: string) => void
+  focusAreas: FocusArea[]
+  onCreate: (focusArea: string, title: string) => void
   onCancel: () => void
 }) {
-  const [project, setProject] = useState(projects[0]?.name ?? '')
+  const [focusArea, setFocusArea] = useState(focusAreas[0]?.name ?? '')
   const [title, setTitle] = useState('')
 
   return (
     <div className="flex flex-col gap-2 border-b border-zinc-800 p-3">
       <select
-        value={project}
-        onChange={(e) => setProject(e.target.value)}
+        value={focusArea}
+        onChange={(e) => setFocusArea(e.target.value)}
         className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200"
       >
-        {projects.map((p) => (
-          <option key={p.name} value={p.name}>{p.name}</option>
+        {focusAreas.map((a) => (
+          <option key={a.name} value={a.name}>{a.name}</option>
         ))}
       </select>
       <input
@@ -57,8 +55,8 @@ function NewStreamForm({
       />
       <div className="flex gap-2">
         <button
-          onClick={() => project && onCreate(project, title)}
-          disabled={!project}
+          onClick={() => focusArea && onCreate(focusArea, title)}
+          disabled={!focusArea}
           className="flex-1 rounded bg-teal-900/40 px-2 py-1 text-xs text-teal-300 hover:bg-teal-900/60 disabled:opacity-40"
         >
           Create
@@ -76,20 +74,18 @@ function NewStreamForm({
 
 export default function ChatPanel() {
   const [streams, setStreams] = useState<WorkStream[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
+  const [focusAreas, setFocusAreas] = useState<FocusArea[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [active, setActive] = useState<WorkStream | null>(null)
   const [showNewForm, setShowNewForm] = useState(false)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null)
-  const [terminalLoading, setTerminalLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     api.listStreams().then(setStreams).catch(() => {})
-    api.getProjects().then(setProjects).catch(() => {})
+    api.getFocusAreas().then(setFocusAreas).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -97,53 +93,19 @@ export default function ChatPanel() {
     api.getStream(activeId).then(setActive).catch(() => setActive(null))
   }, [activeId])
 
-  // A terminal belongs to a project, not a stream — reused across every
-  // stream for that project, same as Dann's own open_claude_code tool does
-  // server-side. Look for an existing live session whenever the active
-  // project changes; don't auto-create one (that spawns a real `claude`
-  // process) — only findExistingTerminal, handleOpenTerminal creates.
-  useEffect(() => {
-    setTerminalSessionId(null)
-    if (!active?.project) return
-    findExistingTerminal(active.project)
-  }, [active?.project])
-
-  async function findExistingTerminal(project: string) {
-    try {
-      const sessions = await api.listTerminals()
-      const match = sessions.find((s) => s.project_name === project && s.alive)
-      setTerminalSessionId(match ? match.session_id : null)
-    } catch {
-      // dashboard terminal API unreachable — leave as not-found
-    }
-  }
-
-  async function handleOpenTerminal() {
-    if (!active?.project || terminalLoading) return
-    setTerminalLoading(true)
-    try {
-      const session = await api.createTerminal(active.project)
-      setTerminalSessionId(session.session_id)
-    } catch {
-      setError('Could not open a terminal for this project.')
-    } finally {
-      setTerminalLoading(false)
-    }
-  }
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [active?.messages.length])
 
-  async function handleCreate(project: string, title: string) {
+  async function handleCreate(focusArea: string, title: string) {
     setError(null)
     try {
-      const stream = await api.createStream(project, title)
+      const stream = await api.createStream(focusArea, title)
       setStreams((prev) => [stream, ...prev])
       setActiveId(stream.id)
       setShowNewForm(false)
     } catch {
-      setError(`Could not create a stream for '${project}'.`)
+      setError(`Could not create a stream for '${focusArea}'.`)
     }
   }
 
@@ -151,6 +113,19 @@ export default function ChatPanel() {
     await api.deleteStream(id).catch(() => {})
     setStreams((prev) => prev.filter((s) => s.id !== id))
     if (activeId === id) setActiveId(null)
+  }
+
+  async function handleClear() {
+    if (!activeId) return
+    if (!window.confirm('Clear this conversation? Dann will start fresh with no memory of it.')) return
+    setError(null)
+    try {
+      const cleared = await api.clearStream(activeId)
+      setActive(cleared)
+      setStreams((prev) => prev.map((s) => (s.id === cleared.id ? cleared : s)))
+    } catch {
+      setError('Could not clear this conversation.')
+    }
   }
 
   async function handleSend() {
@@ -172,7 +147,6 @@ export default function ChatPanel() {
         const updated = prev.map((s) => (s.id === fresh.id ? fresh : s))
         return updated.sort((a, b) => b.updated_at - a.updated_at)
       })
-      if (!terminalSessionId && fresh.project) findExistingTerminal(fresh.project)
     } catch {
       setError('Dann could not respond — is Ollama running?')
     } finally {
@@ -188,15 +162,16 @@ export default function ChatPanel() {
           <span className="text-xs font-medium uppercase tracking-wide text-zinc-400">Work Streams</span>
           <button
             onClick={() => setShowNewForm((v) => !v)}
-            className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-700"
+            className="rounded bg-teal-900/40 px-2 py-0.5 text-xs text-teal-300 hover:bg-teal-900/60"
+            title="Start a new conversation"
           >
-            + New
+            + New conversation
           </button>
         </div>
 
         {showNewForm && (
           <NewStreamForm
-            projects={projects}
+            focusAreas={focusAreas}
             onCreate={handleCreate}
             onCancel={() => setShowNewForm(false)}
           />
@@ -217,7 +192,7 @@ export default function ChatPanel() {
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium text-zinc-200">{s.title}</p>
                   <p className="truncate text-[10px] text-zinc-500">
-                    {s.title !== s.project && `${s.project} · `}{relTime(s.updated_at * 1000)}
+                    {s.title !== s.focus_area && `${s.focus_area} · `}{relTime(s.updated_at * 1000)}
                   </p>
                 </div>
                 <button
@@ -238,93 +213,68 @@ export default function ChatPanel() {
           Select or create a work stream to start chatting with Dann.
         </div>
       ) : (
-        <>
-          {/* ── Chat thread ─────────────────────────────────────────────── */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2">
-              <span className="text-sm font-medium text-zinc-200">{active.title}</span>
-              {active.title !== active.project && (
-                <span className="rounded bg-blue-900/60 px-1.5 py-0.5 text-[10px] text-blue-300">{active.project}</span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-4 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-medium text-zinc-200">{active.title}</span>
+              {active.title !== active.focus_area && (
+                <span className="shrink-0 rounded bg-blue-900/60 px-1.5 py-0.5 text-[10px] text-blue-300">{active.focus_area}</span>
               )}
             </div>
-
-            <div className="flex-1 space-y-2 overflow-y-auto p-4">
-              {active.messages.length === 0 && (
-                <p className="text-center text-xs text-zinc-700">No messages yet — say hello.</p>
-              )}
-              {active.messages.map((m, i) => <MessageBubble key={i} msg={m} />)}
-              {sending && (
-                <div className="flex justify-start">
-                  <div className="voice-dann-bubble max-w-[80%] rounded-lg rounded-tl-sm px-3 py-2 text-sm opacity-60">
-                    thinking…
-                  </div>
-                </div>
-              )}
-              <div ref={bottomRef} />
-            </div>
-
-            {error && <p className="px-4 pb-1 text-[11px] text-neon-red">{error}</p>}
-
-            <div className="flex gap-2 border-t border-zinc-800 p-3">
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-                placeholder="Message Dann…"
-                disabled={sending}
-                className="flex-1 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 disabled:opacity-50"
-              />
+            <div className="flex shrink-0 items-center gap-1">
               <button
-                onClick={handleSend}
-                disabled={sending || !input.trim()}
-                className="rounded bg-teal-900/40 px-4 py-2 text-sm text-teal-300 hover:bg-teal-900/60 disabled:opacity-40"
+                onClick={() => setShowNewForm((v) => !v)}
+                className="rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                title="Start a new conversation"
               >
-                Send
+                New
+              </button>
+              <button
+                onClick={handleClear}
+                disabled={active.messages.length === 0}
+                className="rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-30"
+                title="Clear this conversation's history — Dann starts fresh"
+              >
+                Clear
               </button>
             </div>
           </div>
 
-          {/* ── Project terminal ────────────────────────────────────────── */}
-          <div className="flex w-[45%] min-w-0 flex-col border-l border-zinc-800">
-            <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
-              <span className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-                Terminal — {active.project}
-              </span>
-              {terminalSessionId && (
-                <button
-                  onClick={() => findExistingTerminal(active.project)}
-                  className="text-zinc-600 hover:text-zinc-400"
-                  title="Refresh"
-                >
-                  ↻
-                </button>
-              )}
-            </div>
-            {terminalSessionId ? (
-              <div className="flex-1 p-2">
-                <Suspense fallback={<div className="p-4 text-xs text-zinc-500">Loading terminal…</div>}>
-                  <TerminalPane
-                    key={terminalSessionId}
-                    sessionId={terminalSessionId}
-                    isActive
-                    onExit={() => setTerminalSessionId(null)}
-                  />
-                </Suspense>
-              </div>
-            ) : (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-xs text-zinc-600">
-                <p>No terminal open for '{active.project}' yet.</p>
-                <button
-                  onClick={handleOpenTerminal}
-                  disabled={terminalLoading}
-                  className="rounded bg-zinc-800 px-3 py-1.5 text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
-                >
-                  {terminalLoading ? 'Opening…' : 'Open Terminal'}
-                </button>
+          <div className="flex-1 space-y-2 overflow-y-auto p-4">
+            {active.messages.length === 0 && (
+              <p className="text-center text-xs text-zinc-700">No messages yet — say hello.</p>
+            )}
+            {active.messages.map((m, i) => <MessageBubble key={i} msg={m} />)}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="voice-dann-bubble max-w-[80%] rounded-lg rounded-tl-sm px-3 py-2 text-sm opacity-60">
+                  thinking…
+                </div>
               </div>
             )}
+            <div ref={bottomRef} />
           </div>
-        </>
+
+          {error && <p className="px-4 pb-1 text-[11px] text-neon-red">{error}</p>}
+
+          <div className="flex gap-2 border-t border-zinc-800 p-3">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+              placeholder="Message Dann…"
+              disabled={sending}
+              className="flex-1 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 disabled:opacity-50"
+            />
+            <button
+              onClick={handleSend}
+              disabled={sending || !input.trim()}
+              className="rounded bg-teal-900/40 px-4 py-2 text-sm text-teal-300 hover:bg-teal-900/60 disabled:opacity-40"
+            >
+              Send
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
