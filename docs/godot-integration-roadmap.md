@@ -146,16 +146,40 @@ have bitten on first real use:**
    since the bug and the fix are both runtime-side), then the `runtime/` submodule pointer
    in `dann-of-thursday` was bumped to pick them up.
 
-### Phase 3 — Point it at a real project
-- [ ] Once there's an actual Godot game repo, add the editor plugin there too (commit
-      `addons/<plugin>/` to that project's own repo — it's a per-project Godot addon, not
-      part of `dann-of-thursday` or `pnd-mcp`).
-- [ ] Decide always_on vs. on-demand for the `godot` module in real use (on-demand via
-      `enable_module` fits the existing pattern; always_on trades a bit of startup cost
-      for Dann never needing to be told to "turn on Godot").
-- [ ] Decide if any tools need a confirm-first policy (e.g. destructive scene/node
-      deletion) — check whether the vendored server supports scoping which tools are
-      exposed, vs. relying on the LLM's own judgment like the other modules currently do.
+### Phase 3 — Point it at a real project — done (2026-09-17)
+- [x] No real Godot game existed anywhere on this machine going in — the "sandbox" from
+      Phase 1 was always throwaway. Picked `github.com/R3dPnd/pnd-games` (already in the
+      `pnd-` naming schema) as the home, cloned it, and found it holds two separate
+      "Intro to Godot" tutorial projects, not one game: `intro-to-godot/` (more developed —
+      Scripts/Materials/3D/2D folders) and `IntroToGodot/` (an earlier, simpler attempt).
+      Installed the plugin in `intro-to-godot/` only.
+- [x] Copied `addons/godot_mcp/` into `pnd-games/intro-to-godot/` and enabled it in its
+      `project.godot`. Opening the project in this machine's Godot 4.7 (it was authored
+      against 4.2) auto-bumped `config/features`, added an `[animation]` compatibility
+      section, and generated `.uid` sidecar files for scripts — normal engine-upgrade
+      side effects, unrelated to the plugin. There's a pre-existing, unrelated parse error
+      in `Scripts/intro-to-scripting.gd` (`Cannot find member "x" in base "float"`) — left
+      alone, it's the tutorial's own code, not something this integration touched.
+      Enabling the plugin also auto-injected its 3 required autoloads
+      (`MCPRuntimeBridge`/`MCPInputBridge`/`MCPScreenshotBridge`) into `project.godot`,
+      same as it did in the Phase-1 sandbox.
+  - Committed to `pnd-games` (not yet pushed as of writing — check `git log`/`git status`
+    there before assuming GitHub has it).
+- [x] Re-verified the standalone bridge against this *real* project (not the sandbox):
+      opened it in the editor, started the vendored server, confirmed
+      `[Godot MCP] Connected to MCP server (ws://127.0.0.1:6505)` again. Didn't re-run the
+      full Dann chat-routing test here — Phase 2's test already proved that path works;
+      re-running it per-project isn't needed unless something about a specific project
+      breaks it.
+- [x] **always_on vs. on-demand**: staying on-demand (`always_on: false`, unchanged).
+      Matches every other personal module, costs nothing to leave as-is, trivially
+      flippable in `config.yaml` later if "turn on Godot" every session gets annoying.
+- [x] **Confirm-first policy for destructive tools**: not adding one. The 20-tool
+      allowlist from Phase 2 already excludes `delete_scene`, batch operations, and
+      export/deploy — the only deletion tool included, `delete_node`, goes through the
+      editor's own undo stack (godot-mcp's "UndoRedo integration" feature), so it's
+      already reversible with Ctrl+Z. Revisit only if real use finds a tool in the
+      allowlist that turns out to be riskier than it looked from the README.
 
 ### Phase 4 — Workflow polish
 - [ ] Close the edit → error → fix loop: after Dann creates/edits a script, have it pull
