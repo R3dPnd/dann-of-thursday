@@ -161,6 +161,17 @@ agents:
     description: "Local machine control — volume, opening apps, locking the screen. Optional module — enable_module first."
     enabled: true
 
+  - name: godot
+    description: >
+      Direct access to the Godot editor for the open project — create/edit
+      GDScript scripts, scenes, and nodes, and read editor errors. Requires
+      the Godot editor to be open with the Godot MCP plugin enabled and
+      connected (godot-mcp/, see docs/godot-integration-roadmap.md). Use
+      this instead of claude_code for Godot-specific script/scene/node
+      work; use claude_code for broader refactors or non-Godot coding.
+      Optional module — enable_module first.
+    enabled: true
+
 focus_areas:
   # Topics you most want Dann to engage on — distinct from mcp.servers
   # (technical tool+data bundles) and agents (routing targets). Rendered
@@ -180,7 +191,12 @@ focus_areas:
     enabled: true
 
   - name: coding
-    description: "General coding help, tooling, and best practices — not tied to one specific project. Use open_terminal for a live Claude Code session here, or open_claude_code/ask_claude_code by name for a specific project."
+    description: "General coding help, tooling, and best practices — not tied to one specific project. Use open_terminal for a live Claude Code session here, or open_claude_code/ask_claude_code by name for a specific project. For Godot-specific script/scene/node work in the open editor, use the godot module instead — it's complementary, not a replacement."
+    enabled: true
+
+  - name: godot
+    description: "Godot game development — GDScript, scenes, nodes, and the editor itself."
+    module: godot
     enabled: true
 
   - name: security
@@ -239,6 +255,39 @@ mcp:
       args: ["-m", "integrations.servers.system_server"]
       description: "Local machine control — volume, opening apps, locking the screen"
       always_on: false
+
+    - name: godot
+      command: node
+      args: ["../godot-mcp/server/build/index.js"]
+      description: "Godot editor — scripts, scenes, nodes, editor errors (see docs/godot-integration-roadmap.md)"
+      always_on: false
+      # godot-mcp reports 173 tools total — exposing all of them on
+      # enable_module would blow past what the small local router model
+      # can usefully handle. This allowlist keeps just the script/scene/
+      # node/error subset that "give Dann script creation access" needs;
+      # expand deliberately (see MCPManager's tools: support in
+      # runtime/integrations/client.py) once real usage says what's missing.
+      tools:
+        - get_project_info
+        - get_filesystem_tree
+        - get_scene_tree
+        - create_scene
+        - open_scene
+        - save_scene
+        - add_node
+        - delete_node
+        - update_property
+        - get_node_properties
+        - rename_node
+        - list_scripts
+        - read_script
+        - create_script
+        - edit_script
+        - attach_script
+        - validate_script
+        - search_in_files
+        - get_editor_errors
+        - get_output_log
 
 ux:
   play_listening_sound: true

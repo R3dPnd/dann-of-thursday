@@ -121,7 +121,7 @@ def _launch_electron_when_ready(port: int, timeout: float = 30.0) -> None:
 
 
 def cmd_dev(voice: bool = False) -> None:
-    env_api = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    env_api = {**os.environ, "PYTHONUNBUFFERED": "1", "DANN_CONFIG_PATH": str(REPO / "config.yaml")}
     if not voice:
         env_api["NO_VOICE"] = "1"
 
@@ -195,7 +195,7 @@ def cmd_dev(voice: bool = False) -> None:
 
 def cmd_electron(voice: bool = False) -> None:
     """Start API + Electron dev window (Vite hot reload inside Electron)."""
-    env_api = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    env_api = {**os.environ, "PYTHONUNBUFFERED": "1", "DANN_CONFIG_PATH": str(REPO / "config.yaml")}
     if not voice:
         env_api["NO_VOICE"] = "1"
 
@@ -272,6 +272,7 @@ def cmd_start() -> None:
             "--port", "8000",
         ],
         cwd=str(RUNTIME_DIR),
+        env={**os.environ, "DANN_CONFIG_PATH": str(REPO / "config.yaml")},
     )
 
     def _shutdown(sig=None, frame=None):
