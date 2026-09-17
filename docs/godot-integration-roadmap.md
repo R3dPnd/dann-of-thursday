@@ -181,13 +181,41 @@ have bitten on first real use:**
       already reversible with Ctrl+Z. Revisit only if real use finds a tool in the
       allowlist that turns out to be riskier than it looked from the README.
 
-### Phase 4 — Workflow polish
-- [ ] Close the edit → error → fix loop: after Dann creates/edits a script, have it pull
-      the debugger output/error-reading tool automatically rather than waiting to be told
-      something broke.
-- [ ] Dashboard: confirm the `godot` module shows up for free via the existing
-      `list_modules`/`enable_module` meta-tools and module list UI — no dashboard code
-      should need to change for this.
+### Phase 4 — Workflow polish — done (2026-09-17)
+- [x] Closed the edit → error → fix loop — **but not the way originally planned.** The
+      idea was prompt-only: tell the `godot` agent "always call get_editor_errors after an
+      edit." Tested that live first, the same way every other claim in this doc got
+      tested — asked Dann (via the real chat API, real Ollama, real editor) to create a
+      script, and it called `create_script` then answered immediately with **no** error
+      check. The small/fast router model (small `num_predict`, not a heavy reasoner) just
+      doesn't reliably follow a "remember to do X after Y" instruction across tool-call
+      rounds. Prompt engineering harder wasn't going to fix a model-capability limit.
+
+      Built a real fix instead: `mcp.servers[].follow_up: {trigger_tool: [tool, ...]}`,
+      a generic (not godot-specific) addition to `MCPManager` — `call_tool_with_follow_ups()`
+      runs the configured follow-up tool(s) automatically, in code, immediately after the
+      trigger tool succeeds, with zero extra model round-trips required. `godot`'s entry
+      now sets `create_script`/`edit_script`/`attach_script` → `[get_editor_errors]`.
+      Landed in `pnd-mcp` (`integrations/client.py` + `voice/llm/ollama.py`'s
+      `generate_response` loop — shared by both voice and text chat), then the
+      `runtime/` submodule bump picked it up here. The `godot` agent's description was
+      simplified back down to "mention any errors found" (using data already placed in
+      front of it), not "remember to call another tool" (asking it to plan ahead, which
+      is what it couldn't reliably do).
+
+      Re-verified live after the fix: same request, and this time the log shows
+      `[mcp] Calling tool 'create_script'...` immediately followed by
+      `[mcp] Follow-up: calling tool 'get_editor_errors'...`, and the reply correctly said
+      "There are no syntax errors or warnings." A second test with an actually-suspect
+      script got a reply that engaged with the real problem instead of a rote "success."
+      (A third test, deliberately adversarial phrasing asking it to write *unmistakably*
+      broken syntax verbatim, got an empty response with no tool call at all — the small
+      model just didn't know what to do with that particular prompt. Unrelated to the
+      follow-up mechanism itself, which only runs at all once a trigger tool is actually
+      called; not chased further.)
+- [x] Dashboard module visibility — no separate check needed; already incidentally
+      verified back in Phase 2's smoke test (`GET /api/v1/modules` correctly listed
+      `godot` with its `always_on`/`enabled` state before this session ever enabled it).
 
 ### Phase 5 — Stretch
 - [ ] Runtime input simulation / automated playtesting (godot-mcp's tool list already

@@ -169,7 +169,9 @@ agents:
       connected (godot-mcp/, see docs/godot-integration-roadmap.md). Use
       this instead of claude_code for Godot-specific script/scene/node
       work; use claude_code for broader refactors or non-Godot coding.
-      Optional module — enable_module first.
+      Script edits are automatically followed by an error check (see
+      mcp.servers below) — mention any errors found in your reply instead
+      of just reporting success. Optional module — enable_module first.
     enabled: true
 
 focus_areas:
@@ -288,6 +290,14 @@ mcp:
         - search_in_files
         - get_editor_errors
         - get_output_log
+      # Run automatically right after the trigger tool, no extra model
+      # round needed (see MCPManager.call_tool_with_follow_ups) — prompt-
+      # only "always call X after Y" was tested live and the small router
+      # model just skipped it and reported success unchecked.
+      follow_up:
+        create_script: [get_editor_errors]
+        edit_script: [get_editor_errors]
+        attach_script: [get_editor_errors]
 
 ux:
   play_listening_sound: true
