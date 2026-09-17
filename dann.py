@@ -39,11 +39,15 @@ import webbrowser
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent
+# The FastAPI app, UI, and voice pipeline live in the pnd-mcp submodule
+# (runtime/) — this repo only holds persona config (config.yaml) and
+# persona-specific MCP tool-servers on top of that shared runtime.
+RUNTIME_DIR = REPO / "runtime"
 _WINDOWS = sys.platform == "win32"
 _VENV_BIN = REPO / ".venv" / ("Scripts" if _WINDOWS else "bin")
 VENV_PYTHON = _VENV_BIN / ("python.exe" if _WINDOWS else "python")
 VENV_UVICORN = _VENV_BIN / ("uvicorn.exe" if _WINDOWS else "uvicorn")
-UI_DIR = REPO / "ui"
+UI_DIR = RUNTIME_DIR / "ui"
 
 API_PORT = 8000
 UI_PORT  = 3000
@@ -129,7 +133,7 @@ def cmd_dev(voice: bool = False) -> None:
             "--host", "0.0.0.0",
             "--port", str(API_PORT),
         ],
-        cwd=str(REPO),
+        cwd=str(RUNTIME_DIR),
         env=env_api,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -203,7 +207,7 @@ def cmd_electron(voice: bool = False) -> None:
             "--host", "0.0.0.0",
             "--port", str(API_PORT),
         ],
-        cwd=str(REPO),
+        cwd=str(RUNTIME_DIR),
         env=env_api,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -267,7 +271,7 @@ def cmd_start() -> None:
             "--host", "0.0.0.0",
             "--port", "8000",
         ],
-        cwd=str(REPO),
+        cwd=str(RUNTIME_DIR),
     )
 
     def _shutdown(sig=None, frame=None):
@@ -309,7 +313,7 @@ def cmd_stop() -> None:
             cwd = proc.cwd()
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             cwd = None
-        if "app.main:app" in cmdline and cwd == str(REPO):
+        if "app.main:app" in cmdline and cwd == str(RUNTIME_DIR):
             return True
         if "vite" in cmdline.lower() and cwd == str(UI_DIR):
             return True

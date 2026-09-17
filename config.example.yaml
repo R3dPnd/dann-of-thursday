@@ -19,8 +19,8 @@ wake_word:
   # openWakeWord: fully offline, no account. Built-in phrases (hey_jarvis,
   # alexa, hey_mycroft, ...) work immediately with no setup — just set
   # model to one of those names below instead of a .onnx path. For a custom
-  # "ok Dann" phrase: generate training clips (scripts/wakeword/generate_wakeword_samples.py)
-  # then train (scripts/wakeword/train_wakeword.py), ~1 min on CPU with clips already made.
+  # "ok Dann" phrase: generate training clips (runtime/scripts/wakeword/generate_wakeword_samples.py)
+  # then train (runtime/scripts/wakeword/train_wakeword.py), ~1 min on CPU with clips already made.
   engine: openwakeword
   model: models/ok_dann.onnx   # or a built-in name, e.g. hey_jarvis
   threshold: 0.7
@@ -44,7 +44,7 @@ stt:
 ollama:
   base_url: http://localhost:11434
   model: dann-router   # custom model built from qwen2.5:7b-instruct — see
-                       # models/dann-router.Modelfile and scripts/wakeword/build_router_model.sh.
+                       # runtime/models/dann-router.Modelfile and runtime/scripts/wakeword/build_router_model.sh.
                        # Not pulled automatically; run the script once after setup,
                        # or set this back to llama3.2/qwen2.5:7b-instruct directly.
   system_prompt: |
@@ -193,49 +193,49 @@ mcp:
     # always_on: false (default) -> registered but dormant; Dann's LLM
     # starts it on demand via the enable_module tool (see integrations/client.py).
     - name: projects
-      command: .venv/bin/python
+      command: ../.venv/bin/python
       args: ["-m", "integrations.servers.claude_code_server"]
       description: "Project discovery, Claude Code sessions, and web search — all via the claude CLI"
       always_on: true
 
     - name: focus_areas
-      command: .venv/bin/python
+      command: ../.venv/bin/python
       args: ["-m", "integrations.servers.focus_areas_server"]
       description: "Save notes to a focus area's own context, recalled automatically in future conversations"
       always_on: true
 
     - name: schedule
-      command: .venv/bin/python
+      command: ../.venv/bin/python
       args: ["-m", "integrations.servers.schedule_server"]
-      description: "Google Calendar — view, create, and search events (needs one-time setup, see docs/schedule-setup.md)"
+      description: "Google Calendar — view, create, and search events (needs one-time setup, see runtime/docs/schedule-setup.md)"
       always_on: false
 
     - name: notes
-      command: .venv/bin/python
+      command: ../.venv/bin/python
       args: ["-m", "integrations.servers.notes_server"]
       description: "Quick notes and reminders, stored locally"
       always_on: false
 
     - name: gardening
-      command: .venv/bin/python
+      command: ../.venv/bin/python
       args: ["-m", "integrations.servers.gardening_server"]
       description: "Garden log — plantings, harvests, and care notes, stored locally"
       always_on: false
 
     - name: bjj
-      command: .venv/bin/python
+      command: ../.venv/bin/python
       args: ["-m", "integrations.servers.bjj_server"]
       description: "BJJ training log — sessions, techniques, and notes, stored locally"
       always_on: false
 
     - name: devteam
-      command: .venv/bin/python
+      command: ../.venv/bin/python
       args: ["-m", "integrations.servers.devteam_server"]
       description: "Background multi-phase Claude Code pipelines (research/plan/implement/test/devops)"
       always_on: false
 
     - name: system
-      command: .venv/bin/python
+      command: ../.venv/bin/python
       args: ["-m", "integrations.servers.system_server"]
       description: "Local machine control — volume, opening apps, locking the screen"
       always_on: false
